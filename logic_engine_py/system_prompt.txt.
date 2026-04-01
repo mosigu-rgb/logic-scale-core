@@ -1,0 +1,9 @@
+# In deiner auditor.py
+response = client.messages.create(
+    model="claude-3-5-sonnet-20240620",
+    max_tokens=1024,
+    system="HIER DEN PROMPT VON OBEN REINKOPIEREN", # Das ist das Gehirn!
+    messages=[
+        {"role": "user", "content": f"Topic: {topic}, Argument: {user_input}"}
+    ]
+)
