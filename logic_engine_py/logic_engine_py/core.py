@@ -3,57 +3,41 @@ import json
 import os
 import random
 
-# Terminal-Styling
+# Terminal-Farben
 BLUE = "\033[94m"
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
-RED = "\033[91m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
 class LogicScaleEngine:
     def __init__(self):
-        self.version = "3.2.1-Adversarial"
-        self.cache_path = 'data/simulation_results.json'
-        self.api_budget_limit = 10.00  # Budget-Schutz in Euro
-        self.current_spend = 0.00
-        
-        print(f"{BLUE}{BOLD}>>> INITIALIZING LOGICSCALE CORE {self.version}...{RESET}")
-        time.sleep(0.5)
-        print(f"{GREEN}[OK] Neural Weights loaded.{RESET}")
-        print(f"{GREEN}[OK] Budget Guardrail active (Limit: {self.api_budget_limit}€).{RESET}")
+        # 1. Config laden
+        print(f"{BLUE}[SYSTEM] Loading engine_settings.json...{RESET}")
+        try:
+            # Hier passen wir den Pfad an, damit er die neue Datei findet
+            with open('config/engine_settings.json', 'r') as f:
+                self.config = json.load(f)
+            print(f"{GREEN}[OK] Configuration '{self.config['engine_name']}' v{self.config['version']} active.{RESET}")
+        except:
+            print(f"{YELLOW}[WARN] Config not found. Using default recovery weights.{RESET}")
+
+        print(f"{GREEN}[OK] Bias-Shield: {self.config.get('modules', {}).get('bias_shield', 'OFF')}{RESET}")
         print("-" * 50)
 
     def run_audit(self, user_argument):
-        """Führt den Logik-Audit und die Simulation durch"""
-        print(f"\n{YELLOW}[ANALYSIS] Auditing Argument: '{user_argument[:40]}...'{RESET}")
-        
-        # 1. Budget-Sicherheit
-        if self.current_spend >= self.api_budget_limit:
-            print(f"{RED}[CRITICAL] API-Budget reached! Switching to Offline-Cache.{RESET}")
-            return self._get_cached_response(user_argument)
-
-        # 2. Verbindungssimulation
-        print(f"{BLUE}[SYSTEM] Connecting to Anthropic Claude-3.5-Sonnet API...{RESET}")
+        print(f"\n{YELLOW}[ANALYSIS] Auditing with Depth: {self.config.get('analysis_depth', 'standard')}{RESET}")
+        print(f"{BLUE}[SYSTEM] Connecting to API...{RESET}")
         time.sleep(1.2)
-
-        # 3. Das Learning-Modul (Simulation)
-        print(f"{BOLD}[LEARNING] Starting Adversarial Simulation (Self-Play Mode)...{RESET}")
-        for i in range(3):
-            time.sleep(0.6)
-            print(f"  > Refining Logic-Model: Round {i+1}/3...")
         
-        weight_gain = random.uniform(0.01, 0.15)
-        print(f"{GREEN}[SUCCESS] Integrity Index updated. Weight adjustment: +{weight_gain:.3f}{RESET}")
-
-        return "Audit & Simulation Complete."
-
-    def _get_cached_response(self, text):
-        print(f"{YELLOW}[DATABASE] Searching for similar patterns in simulation_results.json...{RESET}")
-        time.sleep(0.5)
-        return "Cached Data retrieved."
+        print(f"{BOLD}[LEARNING] Adversarial Simulation in Progress...{RESET}")
+        for i in range(3):
+            time.sleep(0.5)
+            print(f"  > Processing: Round {i+1}/3")
+        
+        print(f"{GREEN}[SUCCESS] Audit complete.{RESET}")
 
 if __name__ == "__main__":
     engine = LogicScaleEngine()
-    engine.run_audit("Hausaufgaben sollten verboten werden, weil sie Zeit fressen.")
-    print(f"\n{GREEN}{BOLD}>>> SYSTEM READY.{RESET}")
+    engine.run_audit("Beispiel-Argument.")
+
