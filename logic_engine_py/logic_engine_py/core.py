@@ -1,3 +1,4 @@
+from logic_engine_py.analyzer import ArgumentAnalyzer # Der neue Import!
 import time
 import json
 import os
