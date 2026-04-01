@@ -1,0 +1,82 @@
+[
+  {
+    "id": "LS-001",
+    "input": "Fleischessen sollte verboten werden, weil es alle machen.",
+    "logic_score": 1.8,
+    "fallacies": [{"type": "Ad Populum", "severity": "high"}],
+    "simulated_twin": "Die ethische Bewertung des Fleischkonsums sollte auf ökologischen Fußabdrücken basieren, statt auf sozialen Konventionen.",
+    "weight_delta": 0.15
+  },
+  {
+    "id": "LS-002",
+    "input": "Wenn wir Cannabis legalisieren, wird bald jeder Heroin nehmen.",
+    "logic_score": 2.1,
+    "fallacies": [{"type": "Slippery Slope", "severity": "high"}],
+    "simulated_twin": "Die Legalisierung erfordert eine Risikoanalyse der Suchtpotenziale statt rein spekulativer Eskalationsszenarien.",
+    "weight_delta": 0.11
+  },
+  {
+    "id": "LS-003",
+    "input": "Mein Opa hat geraucht und wurde 90, also ist Rauchen nicht ungesund.",
+    "logic_score": 1.2,
+    "fallacies": [{"type": "Anecdotal Evidence", "severity": "critical"}],
+    "simulated_twin": "Einzelschicksale korrelieren nicht zwingend mit statistischen Mortalitätsraten in der Epidemiologie.",
+    "weight_delta": 0.22
+  },
+  {
+    "id": "LS-004",
+    "input": "Entweder wir bauen Atomkraftwerke oder wir haben keinen Strom mehr.",
+    "logic_score": 3.0,
+    "fallacies": [{"type": "False Dilemma", "severity": "medium"}],
+    "simulated_twin": "Die Energiematrix erfordert eine Abwägung zwischen grundlastfähigen Systemen und volatilen erneuerbaren Energien.",
+    "weight_delta": 0.09
+  },
+  {
+    "id": "LS-005",
+    "input": "Klimawandel gab es schon immer, also ist der Mensch nicht schuld.",
+    "logic_score": 2.8,
+    "fallacies": [{"type": "Non-Sequitur", "severity": "high"}],
+    "simulated_twin": "Historische Klimazyklen schließen anthropogene Einflüsse auf die aktuelle Erwärmungsrate nicht logisch aus.",
+    "weight_delta": 0.18
+  },
+  {
+    "id": "LS-006",
+    "input": "Videospiele machen gewalttätig, weil alle Amokläufer Spiele gespielt haben.",
+    "logic_score": 2.2,
+    "fallacies": [{"type": "Cum Hoc Ergo Propter Hoc", "severity": "high"}],
+    "simulated_twin": "Die Korrelation zwischen Medienkonsum und Aggression erfordert eine multivariate Analyse unter Berücksichtigung psychosozialer Faktoren.",
+    "weight_delta": 0.142
+  },
+  {
+    "id": "LS-007",
+    "input": "Wir sollten nicht auf die Wissenschaft hören, die haben sich früher auch schon geirrt.",
+    "logic_score": 3.1,
+    "fallacies": [{"type": "Genetic Fallacy", "severity": "medium"}],
+    "simulated_twin": "Die Fehlbarkeit wissenschaftlicher Paradigmen ist Teil des Fortschritts und begründet keine generelle Ablehnung empirischer Evidenz.",
+    "weight_delta": 0.095
+  },
+  {
+    "id": "LS-008",
+    "input": "Wenn du kein Mathe kannst, bist du dumm.",
+    "logic_score": 1.5,
+    "fallacies": [{"type": "False Equivalence", "severity": "high"}],
+    "simulated_twin": "Kognitive Kompetenzen sind multidimensional; Defizite in der Quantitativen Logik lassen keine Rückschlüsse auf die Gesamtintelligenz zu.",
+    "weight_delta": 0.188
+  },
+  {
+    "id": "LS-009",
+    "input": "Das Elektroauto ist schlecht, weil die Batterien auch Dreck machen.",
+    "logic_score": 4.2,
+    "fallacies": [{"type": "Whataboutism", "severity": "medium"}],
+    "simulated_twin": "Eine Ökobilanzierung erfordert den Vergleich der Lebenszyklus-Emissionen verschiedener Antriebstechnologien.",
+    "weight_delta": 0.073
+  },
+  {
+    "id": "LS-010",
+    "input": "Promis sagen, dieses Produkt ist gut, also kaufe ich es.",
+    "logic_score": 2.0,
+    "fallacies": [{"type": "Argumentum ad Verecundiam", "severity": "high"}],
+    "simulated_twin": "Die Validität einer Produktqualität sollte durch objektive Spezifikationen statt durch autoritätsbasierte Heuristiken verifiziert werden.",
+    "weight_delta": 0.131
+  }
+]
