@@ -1,0 +1,117 @@
+"""
+LogicScale Neural Engine v4.0
+analytics.py — Data aggregation and insight generation.
+               Answers: How do regions think differently?
+               How do age groups differ in fallacy patterns?
+"""
+
+from typing import Dict, List, Any
+from database import AnalysisDB
+
+
+class Analytics:
+    def __init__(self, db: AnalysisDB):
+        self.db = db
+
+    def full_report(self) -> Dict:
+        """Complete analytics report — all dimensions."""
+        return {
+            "overview":          self.db.overview(),
+            "by_region":         self.by_region(),
+            "by_age_group":      self.by_age_group(),
+            "by_skill":          self.db.by_skill(),
+            "fallacy_frequency": self.fallacy_frequency(),
+            "fallacy_by_region": self.db.fallacy_by_region(),
+            "fallacy_by_age":    self.db.fallacy_by_age(),
+            "top_fallacy_per_region": self.db.top_fallacy_per_region(),
+            "score_trend":       self.db.score_trend(),
+            "regional_insights": self.regional_insights(),
+            "age_insights":      self.age_insights(),
+        }
+
+    def by_region(self) -> List[Dict]:
+        rows = self.db.by_region()
+        # Add top fallacy per region
+        top_map = {r["region"]: r["fallacy_type"]
+                   for r in self.db.top_fallacy_per_region()}
+        for r in rows:
+            r["top_fallacy"] = top_map.get(r["region"], "—")
+        return rows
+
+    def by_age_group(self) -> List[Dict]:
+        rows = self.db.by_age_group()
+        # Add top fallacy per age group
+        fallacy_by_age = self.db.fallacy_by_age()
+        top_by_age: Dict[str, str] = {}
+        seen = set()
+        for r in fallacy_by_age:
+            ag = r["age_group"]
+            if ag not in seen:
+                top_by_age[ag] = r["fallacy_type"]
+                seen.add(ag)
+        for r in rows:
+            r["top_fallacy"] = top_by_age.get(r["age_group"], "—")
+        return rows
+
+    def fallacy_frequency(self) -> List[Dict]:
+        rows = self.db.fallacy_frequency()
+        total = sum(r["occurrences"] for r in rows)
+        for r in rows:
+            r["percentage"] = round(r["occurrences"] / total * 100, 1) if total else 0
+        return rows
+
+    def regional_insights(self) -> List[str]:
+        """
+        Generate plain-language insights about regional reasoning differences.
+        These are statistical observations, not stereotypes.
+        """
+        regions = self.by_region()
+        insights = []
+        if not regions:
+            return ["Not enough data yet — run more audits with --region set."]
+
+        sorted_score = sorted(regions, key=lambda r: r.get("avg_score", 0), reverse=True)
+        if len(sorted_score) >= 2:
+            best  = sorted_score[0]
+            worst = sorted_score[-1]
+            diff  = best["avg_score"] - worst["avg_score"]
+            if diff > 0.3:
+                insights.append(
+                    f"Largest logic_score gap: {best['region']} (avg {best['avg_score']:.2f}) "
+                    f"vs {worst['region']} (avg {worst['avg_score']:.2f}) — Δ {diff:.2f}"
+                )
+
+        # Top fallacy per region
+        top = self.db.top_fallacy_per_region()
+        for r in top[:5]:
+            insights.append(
+                f"{r['region']}: most common fallacy is "
+                f"'{r['fallacy_type'].replace('_',' ')}' ({r['count']}×)"
+            )
+
+        return insights
+
+    def age_insights(self) -> List[str]:
+        """Plain-language insights about age group differences."""
+        groups = self.by_age_group()
+        insights = []
+        if not groups:
+            return ["Not enough data yet — run more audits across age groups."]
+
+        sorted_g = sorted(groups, key=lambda g: g.get("avg_score", 0), reverse=True)
+        if sorted_g:
+            best = sorted_g[0]
+            insights.append(
+                f"Highest avg logic_score: age group {best['age_group']} "
+                f"({best['avg_score']:.2f}/5.0, n={best['count']})"
+            )
+
+        sorted_f = sorted(groups, key=lambda g: g.get("avg_fallacies", 0), reverse=True)
+        if sorted_f:
+            most = sorted_f[0]
+            insights.append(
+                f"Most fallacies per argument: age group {most['age_group']} "
+                f"(avg {most.get('avg_fallacies',0):.2f}/argument)"
+            )
+
+        return insights
