@@ -1,0 +1,302 @@
+"""
+LogicScale Neural Engine v4.0
+database.py — SQLite persistence. Stores every audit result.
+               Designed for regional + age analytics queries.
+"""
+
+import json
+import sqlite3
+from datetime import datetime, timezone
+from pathlib  import Path
+from typing   import List, Dict, Any, Optional
+
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS audits (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp        TEXT    NOT NULL,
+    user_age         INTEGER,
+    age_group        TEXT,           -- '11-13', '14-17', '18-21', '22-25'
+    skill_level      TEXT,
+    region           TEXT DEFAULT 'unknown',
+    topic            TEXT DEFAULT 'general',
+    argument_text    TEXT,
+    logic_score      REAL,
+    argument_quality TEXT,
+    weight_delta     REAL,
+    fallacy_count    INTEGER DEFAULT 0,
+    bias_count       INTEGER DEFAULT 0,
+    vocabulary_tier  TEXT,
+    session_number   INTEGER DEFAULT 1,
+    full_json        TEXT            -- complete result blob
+);
+
+CREATE TABLE IF NOT EXISTS fallacy_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    audit_id     INTEGER REFERENCES audits(id),
+    timestamp    TEXT,
+    user_age     INTEGER,
+    age_group    TEXT,
+    region       TEXT,
+    skill_level  TEXT,
+    fallacy_type TEXT,
+    severity     TEXT,
+    confidence   REAL,
+    penalty      REAL
+);
+
+CREATE TABLE IF NOT EXISTS session_progress (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    region       TEXT,
+    age_group    TEXT,
+    skill_level  TEXT,
+    session_num  INTEGER,
+    avg_score    REAL,
+    timestamp    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audits_region    ON audits(region);
+CREATE INDEX IF NOT EXISTS idx_audits_age       ON audits(user_age);
+CREATE INDEX IF NOT EXISTS idx_audits_score     ON audits(logic_score);
+CREATE INDEX IF NOT EXISTS idx_fallacy_type     ON fallacy_events(fallacy_type);
+CREATE INDEX IF NOT EXISTS idx_fallacy_region   ON fallacy_events(region);
+"""
+
+
+def age_group(age: int) -> str:
+    if age <= 13: return "11-13"
+    if age <= 17: return "14-17"
+    if age <= 21: return "18-21"
+    return "22-25"
+
+
+class AnalysisDB:
+    def __init__(self, path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = str(path)
+        self._init()
+
+    def _conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init(self):
+        with self._conn() as conn:
+            conn.executescript(SCHEMA)
+
+    # ── save ───────────────────────────────────────────────────────────────────
+    def save(self, result: dict) -> int:
+        """Persist a full audit result. Returns the inserted row ID."""
+        meta = result.get("neural_meta", {})
+        ana  = result.get("analysis", {})
+
+        age  = int(meta.get("user_age", 0))
+        ts   = meta.get("timestamp", datetime.now(timezone.utc).isoformat())
+        fallacies = ana.get("fallacies", [])
+        biases    = ana.get("cognitive_biases", [])
+
+        row = {
+            "timestamp":        ts,
+            "user_age":         age,
+            "age_group":        age_group(age),
+            "skill_level":      meta.get("skill_level", "unknown"),
+            "region":           meta.get("region", "unknown"),
+            "topic":            meta.get("topic", "general"),
+            "argument_text":    result.get("_raw_argument", ""),
+            "logic_score":      float(ana.get("logic_score", 0)),
+            "argument_quality": ana.get("argument_quality", "unknown"),
+            "weight_delta":     float(ana.get("weight_delta", 0)),
+            "fallacy_count":    len(fallacies),
+            "bias_count":       len(biases),
+            "vocabulary_tier":  meta.get("vocabulary_tier", "secondary"),
+            "session_number":   int(meta.get("session_number", 1)),
+            "full_json":        json.dumps(result, default=str),
+        }
+
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO audits
+                   (timestamp, user_age, age_group, skill_level, region, topic,
+                    argument_text, logic_score, argument_quality, weight_delta,
+                    fallacy_count, bias_count, vocabulary_tier, session_number, full_json)
+                   VALUES
+                   (:timestamp,:user_age,:age_group,:skill_level,:region,:topic,
+                    :argument_text,:logic_score,:argument_quality,:weight_delta,
+                    :fallacy_count,:bias_count,:vocabulary_tier,:session_number,:full_json)
+                """, row
+            )
+            audit_id = cur.lastrowid
+
+            # Store individual fallacy events for granular analytics
+            region     = meta.get("region", "unknown")
+            skill      = meta.get("skill_level", "unknown")
+            ag         = age_group(age)
+            for f in fallacies:
+                conn.execute(
+                    """INSERT INTO fallacy_events
+                       (audit_id, timestamp, user_age, age_group, region,
+                        skill_level, fallacy_type, severity, confidence, penalty)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (audit_id, ts, age, ag, region, skill,
+                     f.get("type","unknown"), f.get("severity","medium"),
+                     float(f.get("confidence", 0)),
+                     float(f.get("penalty_applied", 0)))
+                )
+            return audit_id
+
+    # ── queries ────────────────────────────────────────────────────────────────
+    def recent(self, limit: int = 50) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM audits ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def all_records(self) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM audits ORDER BY id DESC").fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def by_region(self) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT region,
+                       COUNT(*)            AS count,
+                       ROUND(AVG(logic_score),3) AS avg_score,
+                       ROUND(AVG(weight_delta),3) AS avg_delta,
+                       ROUND(MIN(logic_score),2)  AS min_score,
+                       ROUND(MAX(logic_score),2)  AS max_score
+                FROM audits
+                WHERE region != 'unknown'
+                GROUP BY region
+                ORDER BY count DESC
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def by_age_group(self) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT age_group,
+                       COUNT(*)                    AS count,
+                       ROUND(AVG(logic_score),3)   AS avg_score,
+                       ROUND(AVG(weight_delta),3)  AS avg_delta,
+                       ROUND(AVG(fallacy_count),2) AS avg_fallacies
+                FROM audits
+                GROUP BY age_group
+                ORDER BY age_group
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def by_skill(self) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT skill_level,
+                       COUNT(*)                   AS count,
+                       ROUND(AVG(logic_score),3)  AS avg_score,
+                       ROUND(AVG(weight_delta),3) AS avg_delta
+                FROM audits
+                GROUP BY skill_level
+                ORDER BY avg_score DESC
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def fallacy_frequency(self) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT fallacy_type,
+                       COUNT(*)               AS occurrences,
+                       ROUND(AVG(confidence),3) AS avg_confidence,
+                       ROUND(AVG(penalty),3)  AS avg_penalty
+                FROM fallacy_events
+                GROUP BY fallacy_type
+                ORDER BY occurrences DESC
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def fallacy_by_region(self) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT region, fallacy_type, COUNT(*) AS count,
+                       ROUND(AVG(confidence),3) AS avg_conf
+                FROM fallacy_events
+                WHERE region != 'unknown'
+                GROUP BY region, fallacy_type
+                ORDER BY region, count DESC
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def fallacy_by_age(self) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT age_group, fallacy_type, COUNT(*) AS count
+                FROM fallacy_events
+                GROUP BY age_group, fallacy_type
+                ORDER BY age_group, count DESC
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def score_trend(self, region: Optional[str] = None) -> List[Dict]:
+        """Score trend over time (for progress tracking)."""
+        with self._conn() as conn:
+            if region:
+                rows = conn.execute("""
+                    SELECT DATE(timestamp) AS date,
+                           ROUND(AVG(logic_score),3) AS avg_score,
+                           COUNT(*) AS count
+                    FROM audits WHERE region = ?
+                    GROUP BY DATE(timestamp) ORDER BY date
+                """, (region,)).fetchall()
+            else:
+                rows = conn.execute("""
+                    SELECT DATE(timestamp) AS date,
+                           ROUND(AVG(logic_score),3) AS avg_score,
+                           COUNT(*) AS count
+                    FROM audits
+                    GROUP BY DATE(timestamp) ORDER BY date
+                """).fetchall()
+        return [dict(r) for r in rows]
+
+    def top_fallacy_per_region(self) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT f.region, f.fallacy_type, f.count
+                FROM (
+                    SELECT region, fallacy_type, COUNT(*) AS count,
+                           RANK() OVER (PARTITION BY region ORDER BY COUNT(*) DESC) AS rk
+                    FROM fallacy_events WHERE region != 'unknown'
+                    GROUP BY region, fallacy_type
+                ) f WHERE f.rk = 1
+                ORDER BY f.count DESC
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def overview(self) -> Dict:
+        with self._conn() as conn:
+            row = conn.execute("""
+                SELECT COUNT(*)                    AS total_audits,
+                       ROUND(AVG(logic_score),3)   AS avg_logic_score,
+                       ROUND(AVG(weight_delta),3)  AS avg_weight_delta,
+                       ROUND(AVG(fallacy_count),2) AS avg_fallacies_per_audit,
+                       COUNT(DISTINCT region)      AS unique_regions
+                FROM audits
+            """).fetchone()
+            top_fallacy = conn.execute("""
+                SELECT fallacy_type FROM fallacy_events
+                GROUP BY fallacy_type ORDER BY COUNT(*) DESC LIMIT 1
+            """).fetchone()
+        result = dict(row) if row else {}
+        result["top_fallacy"] = top_fallacy["fallacy_type"] if top_fallacy else "none"
+        return result
+
+    @staticmethod
+    def _row_to_dict(row) -> Dict:
+        d = dict(row)
+        # Parse full_json back to object for API responses
+        if "full_json" in d and d["full_json"]:
+            try:
+                d["full_result"] = json.loads(d["full_json"])
+                del d["full_json"]
+            except Exception:
+                pass
+        return d
