@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <title>LogicScale Dashboard</title>
+</head>
+<body>
+    <div class="glass-card">
+        <h2>LogicScale Input</h2>
+        <textarea id="userInput" style="width:100%; height:100px; background:#000; color:#fff; border:1px solid #333; padding:10px;" placeholder="Gib dein Argument ein..."></textarea>
+        <button onclick="runAnalysis()" style="margin-top:15px; background:var(--neon-blue); padding:10px 20px; border:none; cursor:pointer; font-weight:bold;">START DEEP SCAN</button>
+    </div>
+
+    <div class="twin-grid">
+        <div class="glass-card" style="border-left: 4px solid var(--neon-purple);">
+            <h3>Analysis & Flaws</h3>
+            <div id="analysisText">Warte auf Scan...</div>
+            <div class="score-value" id="scoreDisplay">--</div>
+        </div>
+        <div class="glass-card" style="border-left: 4px solid var(--neon-blue);">
+            <h3>Synthetic Twin</h3>
+            <div id="syntheticTwin">Die Engine wird hier die perfekte Logik konstruieren...</div>
+        </div>
+    </div>
+
+    <script>
+        async function runAnalysis() {
+            const text = document.getElementById('userInput').value;
+            document.getElementById('analysisText').innerText = "[SCANNING LOGIC...]";
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                const data = await response.json();
+
+                // Score und Analyse anzeigen
+                document.getElementById('scoreDisplay').innerText = data.score + "/5.0";
+                document.getElementById('analysisText').innerText = data.analysis;
+
+                // Synthetic Twin mit Schreib-Effekt
+                const twinEl = document.getElementById('syntheticTwin');
+                twinEl.innerText = "";
+                let i = 0;
+                function type() {
+                    if (i < data.synthetic_twin.length) {
+                        twinEl.innerHTML += data.synthetic_twin.charAt(i);
+                        i++;
+                        setTimeout(type, 25);
+                    }
+                }
+                type();
+
+            } catch (e) {
+                document.getElementById('analysisText').innerText = "Fehler: Verbindung zum Kern verloren.";
+            }
+        }
+    </script>
+</body>
+</html>
