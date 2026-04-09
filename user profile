@@ -1,0 +1,509 @@
+"""
+LogicScale Neural Engine v4.0
+user_profile.py — Deep cognitive profiling. Tracks every user's
+                  argument DNA, thinking patterns, bias map, and
+                  demographic correlations across sessions.
+"""
+
+import json
+import sqlite3
+import hashlib
+from datetime import datetime, timezone
+from pathlib  import Path
+from typing   import Dict, List, Optional, Any
+
+
+# ── Demographic categories ────────────────────────────────────────────────────
+AGE_GROUPS = {
+    range(11, 14): "11-13",
+    range(14, 18): "14-17",
+    range(18, 22): "18-21",
+    range(22, 26): "22-25",
+    range(26, 35): "26-34",
+    range(35, 50): "35-49",
+    range(50, 99): "50+",
+}
+
+EDUCATION_LEVELS = [
+    "primary", "secondary", "vocational",
+    "bachelor", "master", "phd", "other"
+]
+
+JOB_SECTORS = [
+    "student", "education", "technology", "healthcare",
+    "law", "finance", "engineering", "arts", "politics",
+    "science", "media", "social_work", "military", "other", "unemployed"
+]
+
+INCOME_BRACKETS = [
+    "under_20k", "20k_40k", "40k_60k",
+    "60k_100k", "over_100k", "student_no_income"
+]
+
+ARGUMENT_STYLES = ["narrative", "analytical", "data_driven", "emotional", "socratic"]
+
+
+def get_age_group(age: int) -> str:
+    for r, label in AGE_GROUPS.items():
+        if age in r:
+            return label
+    return "unknown"
+
+
+def user_id_from_email(email: str) -> str:
+    """Deterministic anonymized user ID."""
+    return hashlib.sha256(email.encode()).hexdigest()[:16]
+
+
+# ── Profile Schema ─────────────────────────────────────────────────────────────
+DEFAULT_PROFILE = {
+    # Identity
+    "user_id":          "",
+    "display_name":     "Debater",
+    "created_at":       "",
+
+    # Demographics
+    "age":              0,
+    "age_group":        "unknown",
+    "gender":           "prefer_not_to_say",
+    "region":           "unknown",
+    "country":          "unknown",
+    "education":        "unknown",
+    "job_sector":       "unknown",
+    "income_bracket":   "unknown",
+    "employment_type":  "unknown",   # student / part_time / full_time / freelance
+
+    # Skill
+    "skill_level":      "beginner",
+    "total_sessions":   0,
+    "total_arguments":  0,
+    "xp":               0,
+    "rank":             "Novice",
+
+    # Cognitive fingerprint (auto-learned)
+    "cognitive": {
+        "dominant_fallacy":        None,
+        "fallacy_frequency":       0.0,   # avg fallacies per argument
+        "improvement_velocity":    0.0,   # score change per session
+        "argument_style":          None,  # narrative / analytical / data_driven
+        "evidence_habit":          None,  # anecdotal / statistical / theoretical
+        "pressure_resistance":     0.5,   # 0=breaks under pressure, 1=thrives
+        "consistency_score":       0.5,   # how stable is quality across topics
+        "peak_performance_time":   None,  # morning / afternoon / evening
+        "avg_argument_length":     0,     # word count
+        "vocabulary_complexity":   0.5,   # 0=simple, 1=complex
+    },
+
+    # Weakness map  {weakness_type: cumulative_count}
+    "weakness_map":  {},
+
+    # Topic performance  {topic: avg_score}
+    "topic_scores":  {},
+
+    # Score history  [float per session]
+    "score_history": [],
+
+    # Fallacy history  [{"type":..., "date":..., "session":...}]
+    "fallacy_history": [],
+
+    # Curriculum (30-day plan, auto-generated)
+    "curriculum": {
+        "generated_at": None,
+        "current_week": 0,
+        "plan":         [],
+    },
+
+    # Personalization
+    "preferred_language": "en",
+    "last_active":        None,
+    "streak_days":        0,
+}
+
+XP_PER_SESSION  = 50
+XP_PER_ARGUMENT = 10
+
+RANKS = [
+    (0,     "Novice"),
+    (200,   "Apprentice"),
+    (500,   "Debater"),
+    (1000,  "Analyst"),
+    (2000,  "Rhetorician"),
+    (4000,  "Logician"),
+    (8000,  "Master"),
+    (15000, "Grandmaster"),
+]
+
+
+def xp_to_rank(xp: int) -> str:
+    rank = "Novice"
+    for threshold, name in RANKS:
+        if xp >= threshold:
+            rank = name
+    return rank
+
+
+class UserProfileDB:
+    """Persistent user profiles with cognitive fingerprinting."""
+
+    def __init__(self, db_path: Path):
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = str(db_path)
+        self._init()
+
+    def _conn(self):
+        conn = sqlite3.connect(self.path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init(self):
+        with self._conn() as conn:
+            conn.executescript("""
+            CREATE TABLE IF NOT EXISTS profiles (
+                user_id      TEXT PRIMARY KEY,
+                display_name TEXT,
+                created_at   TEXT,
+                profile_json TEXT NOT NULL,
+                updated_at   TEXT
+            );
+            CREATE TABLE IF NOT EXISTS argument_events (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      TEXT,
+                session_id   TEXT,
+                timestamp    TEXT,
+                topic        TEXT,
+                argument_len INTEGER,
+                logic_score  REAL,
+                weight_delta REAL,
+                fallacy_count INTEGER,
+                top_fallacy  TEXT,
+                argument_style TEXT,
+                hour_of_day  INTEGER,
+                full_json    TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_ae_user   ON argument_events(user_id);
+            CREATE INDEX IF NOT EXISTS idx_ae_topic  ON argument_events(topic);
+            CREATE INDEX IF NOT EXISTS idx_ae_score  ON argument_events(logic_score);
+            """)
+
+    # ── CRUD ──────────────────────────────────────────────────────────────────
+    def get_or_create(self, user_id: str, **kwargs) -> dict:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT profile_json FROM profiles WHERE user_id=?", (user_id,)
+            ).fetchone()
+        if row:
+            return json.loads(row["profile_json"])
+        # Create new
+        profile = {**DEFAULT_PROFILE, "user_id": user_id,
+                   "created_at": datetime.now(timezone.utc).isoformat()}
+        profile.update(kwargs)
+        self.save(profile)
+        return profile
+
+    def save(self, profile: dict):
+        profile["updated_at"] = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO profiles(user_id,display_name,created_at,profile_json,updated_at)
+                VALUES(?,?,?,?,?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    profile_json=excluded.profile_json,
+                    updated_at=excluded.updated_at
+            """, (
+                profile["user_id"],
+                profile.get("display_name","Debater"),
+                profile.get("created_at",""),
+                json.dumps(profile),
+                profile["updated_at"],
+            ))
+
+    def record_argument(self, user_id: str, session_id: str,
+                        analysis_result: dict, topic: str = "general"):
+        """Log one argument event for longitudinal analysis."""
+        a   = analysis_result.get("analysis", {})
+        arg = analysis_result.get("_raw_argument", "")
+        fallacies = a.get("fallacies", [])
+        top_f = fallacies[0]["type"] if fallacies else None
+        now = datetime.now(timezone.utc)
+
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO argument_events
+                (user_id,session_id,timestamp,topic,argument_len,logic_score,
+                 weight_delta,fallacy_count,top_fallacy,argument_style,hour_of_day,full_json)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                user_id, session_id,
+                now.isoformat(), topic,
+                len(arg.split()),
+                float(a.get("logic_score", 0)),
+                float(a.get("weight_delta", 0)),
+                len(fallacies), top_f,
+                self._detect_style(arg),
+                now.hour,
+                json.dumps(analysis_result, default=str),
+            ))
+
+    # ── Profile updater ────────────────────────────────────────────────────────
+    def update_after_session(self, user_id: str, session_results: list,
+                             topic: str = "general") -> dict:
+        """
+        Called after each session. Updates all cognitive metrics.
+        session_results: list of analysis_result dicts from this session.
+        """
+        profile = self.get_or_create(user_id)
+        if not session_results:
+            return profile
+
+        scores = [r["analysis"]["logic_score"] for r in session_results
+                  if "analysis" in r]
+        if not scores:
+            return profile
+
+        avg_score   = sum(scores) / len(scores)
+        all_fallacies = []
+        for r in session_results:
+            all_fallacies.extend(r.get("analysis", {}).get("fallacies", []))
+
+        # ── Score history & velocity ──
+        history = profile["score_history"]
+        history.append(round(avg_score, 3))
+        if len(history) > 100:
+            history = history[-100:]
+        profile["score_history"] = history
+
+        if len(history) >= 2:
+            velocity = sum(
+                history[i] - history[i-1]
+                for i in range(max(1, len(history)-5), len(history))
+            ) / min(5, len(history)-1)
+            profile["cognitive"]["improvement_velocity"] = round(velocity, 4)
+
+        # ── Fallacy map ──
+        for f in all_fallacies:
+            ftype = f.get("type", "unknown")
+            profile["weakness_map"][ftype] = profile["weakness_map"].get(ftype, 0) + 1
+            profile["fallacy_history"].append({
+                "type": ftype, "session": profile["total_sessions"],
+                "date": datetime.now(timezone.utc).isoformat()[:10]
+            })
+        if len(profile["fallacy_history"]) > 500:
+            profile["fallacy_history"] = profile["fallacy_history"][-500:]
+
+        # ── Dominant fallacy ──
+        wm = profile["weakness_map"]
+        if wm:
+            profile["cognitive"]["dominant_fallacy"] = max(wm, key=wm.get)
+            total_args = max(profile["total_arguments"] + len(scores), 1)
+            profile["cognitive"]["fallacy_frequency"] = round(
+                sum(wm.values()) / total_args, 2)
+
+        # ── Topic performance ──
+        ts = profile["topic_scores"]
+        if topic not in ts:
+            ts[topic] = avg_score
+        else:
+            ts[topic] = round((ts[topic] * 0.7) + (avg_score * 0.3), 3)  # EMA
+        profile["topic_scores"] = ts
+
+        # ── Consistency score ──
+        if len(scores) >= 2:
+            import statistics
+            std = statistics.stdev(scores)
+            profile["cognitive"]["consistency_score"] = round(max(0, 1 - std/2), 3)
+
+        # ── Argument style ──
+        styles = [self._detect_style(r.get("_raw_argument",""))
+                  for r in session_results]
+        if styles:
+            profile["cognitive"]["argument_style"] = max(
+                set(styles), key=styles.count)
+
+        # ── Avg argument length ──
+        lengths = [len(r.get("_raw_argument","").split()) for r in session_results]
+        if lengths:
+            profile["cognitive"]["avg_argument_length"] = int(sum(lengths)/len(lengths))
+
+        # ── Peak time ──
+        hour = datetime.now(timezone.utc).hour
+        profile["cognitive"]["peak_performance_time"] = (
+            "morning" if hour < 12 else "afternoon" if hour < 17 else "evening"
+        )
+
+        # ── XP & rank ──
+        profile["total_sessions"]  += 1
+        profile["total_arguments"] += len(scores)
+        profile["xp"] += XP_PER_SESSION + len(scores) * XP_PER_ARGUMENT
+        profile["rank"] = xp_to_rank(profile["xp"])
+        profile["last_active"] = datetime.now(timezone.utc).isoformat()
+
+        # ── Skill auto-upgrade ──
+        if avg_score >= 4.0 and profile["skill_level"] == "intermediate":
+            profile["skill_level"] = "advanced"
+        elif avg_score >= 3.0 and profile["skill_level"] == "beginner":
+            profile["skill_level"] = "intermediate"
+
+        self.save(profile)
+        return profile
+
+    def get_percentile(self, user_id: str, db: "AnalysisDB") -> dict:
+        """Compare user to peers (same age group, same region)."""
+        profile = self.get_or_create(user_id)
+        if not profile["score_history"]:
+            return {"percentile": None, "message": "Not enough data yet"}
+
+        user_avg = sum(profile["score_history"][-10:]) / min(10, len(profile["score_history"]))
+        ag = profile.get("age_group", "unknown")
+        region = profile.get("region", "unknown")
+
+        with self._conn() as conn:
+            # Compare to same age group
+            peer_scores = conn.execute("""
+                SELECT AVG(logic_score) as avg_s
+                FROM argument_events ae
+                JOIN profiles p ON ae.user_id = p.user_id
+                WHERE ae.user_id != ?
+                GROUP BY ae.user_id
+            """, (user_id,)).fetchall()
+
+        scores = [r["avg_s"] for r in peer_scores if r["avg_s"]]
+        if not scores:
+            return {"percentile": None, "message": "Not enough peer data yet"}
+
+        below = sum(1 for s in scores if s < user_avg)
+        percentile = int(below / len(scores) * 100)
+        return {
+            "user_avg":    round(user_avg, 2),
+            "percentile":  percentile,
+            "peer_count":  len(scores),
+            "message": f"You are in the {percentile}th percentile among {len(scores)} peers"
+        }
+
+    def generate_curriculum(self, user_id: str) -> list:
+        """Auto-generate a personalized 4-week training plan."""
+        profile = self.get_or_create(user_id)
+        wm = profile.get("weakness_map", {})
+        top_weaknesses = sorted(wm.items(), key=lambda x: x[1], reverse=True)[:3]
+        top_w = [w for w, _ in top_weaknesses] or ["evidence", "logic", "structure"]
+
+        plan = [
+            {
+                "week": 1,
+                "focus": f"Eliminate {top_w[0].replace('_',' ')}",
+                "exercises": [
+                    f"Identify {top_w[0]} in 5 sample arguments",
+                    "Rewrite each argument without the fallacy",
+                    "Practice evidence-only arguments for 3 sessions",
+                ],
+                "goal": "Reduce fallacy frequency by 30%"
+            },
+            {
+                "week": 2,
+                "focus": "Evidence & Structure Building",
+                "exercises": [
+                    "Every argument must cite a specific source",
+                    "Practice premise→evidence→conclusion chain",
+                    "Socratic mode: 3 sessions asking questions only",
+                ],
+                "goal": "Achieve logic_score >= 3.5 consistently"
+            },
+            {
+                "week": 3,
+                "focus": "Pressure & Rebuttal",
+                "exercises": [
+                    "5 Pressure Test sessions (hostile mode)",
+                    "Practice the Rescue tool 0 times (face pressure)",
+                    "Record and review your rebuttals",
+                ],
+                "goal": "Pressure resistance score >= 0.7"
+            },
+            {
+                "week": 4,
+                "focus": "Full Debate Mastery",
+                "exercises": [
+                    "3 full debate sessions on unfamiliar topics",
+                    "Debate the opposite of your real opinion",
+                    "Final assessment: 10-argument session",
+                ],
+                "goal": f"Overall logic_score >= {min(4.0, (profile.get('score_history') or [2.5])[-1] + 1.0):.1f}"
+            },
+        ]
+
+        profile["curriculum"]["generated_at"] = datetime.now(timezone.utc).isoformat()
+        profile["curriculum"]["plan"] = plan
+        profile["curriculum"]["current_week"] = 1
+        self.save(profile)
+        return plan
+
+    # ── Insight generator ──────────────────────────────────────────────────────
+    def personal_insights(self, user_id: str) -> List[str]:
+        profile = self.get_or_create(user_id)
+        cog = profile.get("cognitive", {})
+        ts  = profile.get("topic_scores", {})
+        insights = []
+
+        # Improvement velocity
+        v = cog.get("improvement_velocity", 0)
+        if v > 0.1:
+            insights.append(f"You are improving rapidly (+{v:.2f}/session) — keep the momentum.")
+        elif v < -0.05:
+            insights.append("Your scores have been declining slightly. Consider a Weakness Drill session.")
+
+        # Topic gap
+        if len(ts) >= 2:
+            best_t  = max(ts, key=ts.get)
+            worst_t = min(ts, key=ts.get)
+            if ts[best_t] - ts[worst_t] > 1.0:
+                insights.append(
+                    f"Large topic gap: strong in '{best_t}' ({ts[best_t]:.2f}) "
+                    f"but weak in '{worst_t}' ({ts[worst_t]:.2f}). "
+                    f"This suggests a knowledge gap, not a reasoning flaw."
+                )
+
+        # Peak time
+        peak = cog.get("peak_performance_time")
+        if peak:
+            insights.append(f"Your arguments are strongest in the {peak}.")
+
+        # Dominant fallacy
+        df = cog.get("dominant_fallacy")
+        if df:
+            insights.append(
+                f"Your most frequent fallacy is '{df.replace('_',' ')}' "
+                f"({profile['weakness_map'].get(df,0)} occurrences). "
+                f"Prioritize the Weakness Drill for this."
+            )
+
+        # Style
+        style = cog.get("argument_style")
+        if style:
+            tips = {
+                "narrative":   "You argue narratively — powerful for persuasion but add more data.",
+                "analytical":  "You argue analytically — very strong, try adding emotional resonance.",
+                "data_driven": "You use data well — make sure your data sources are robust.",
+                "emotional":   "You rely on emotion — try the 'evidence-first' drill.",
+                "socratic":    "You ask good questions — practice making direct claims too.",
+            }
+            insights.append(tips.get(style, ""))
+
+        return [i for i in insights if i]
+
+    @staticmethod
+    def _detect_style(text: str) -> str:
+        """Heuristic argument style detection."""
+        text_lower = text.lower()
+        data_words  = ["study", "research", "data", "statistic", "%", "survey",
+                       "according to", "shows that", "evidence"]
+        emotion_words = ["feel", "believe", "unfair", "terrible", "wonderful",
+                         "everyone knows", "obvious", "clearly"]
+        question_words = ["why", "how", "what if", "consider", "isn't it"]
+
+        data_count     = sum(1 for w in data_words     if w in text_lower)
+        emotion_count  = sum(1 for w in emotion_words  if w in text_lower)
+        question_count = sum(1 for w in question_words if w in text_lower)
+
+        if data_count >= 2:     return "data_driven"
+        if question_count >= 2: return "socratic"
+        if emotion_count >= 2:  return "emotional"
+        if len(text.split()) > 60: return "analytical"
+        return "narrative"
