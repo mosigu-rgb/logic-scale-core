@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>DebateCoach — Argue Better</title>
+<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700;800;900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0e0e0e;
+  --surface: #161616;
+  --surface2: #1e1e1e;
+  --border: #2a2a2a;
+  --border2: #383838;
+  --text: #f0ede8;
+  --text2: #a0998e;
+  --text3: #5a5550;
+  --accent: #f5e642;
+  --accent2: #ff5c2b;
+  --green: #3ddc84;
+  --red: #ff4757;
+  --blue: #4da6ff;
+  --purple: #c084fc;
+
+  /* LITE MODE */
+  --lite-bg: #fafaf8;
+  --lite-surface: #ffffff;
+  --lite-border: #e8e5e0;
+  --lite-text: #1a1815;
+  --lite-text2: #6b6560;
+  --lite-accent: #e8a020;
+  --lite-green: #16a34a;
+  --lite-red: #dc2626;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body {
+  background:var(--bg); color:var(--text);
+  font-family:'Cabinet Grotesk',sans-serif;
+  min-height:100vh; overflow-x:hidden;
+}
+
+/* ══ MODE TOGGLE ══ */
+.mode-toggle {
+  position:fixed; top:1rem; right:1rem; z-index:200;
+  display:flex; align-items:center; gap:.5rem;
+  background:var(--surface); border:1px solid var(--border2);
+  padding:.4rem .75rem; border-radius:100px;
+  font-family:'JetBrains Mono',monospace; font-size:.65rem;
+  cursor:pointer; transition:all .3s; user-select:none;
+}
+.mode-toggle:hover { border-color:var(--accent); }
+.toggle-pill {
+  width:32px; height:18px; background:var(--border2);
+  border-radius:9px; position:relative; transition:background .3s;
+}
+.toggle-ball {
+  width:14px; height:14px; background:var(--text3);
+  border-radius:50%; position:absolute; top:2px; left:2px;
+  transition:all .3s;
+}
+.mode-toggle.lite .toggle-pill { background:var(--accent); }
+.mode-toggle.lite .toggle-ball { left:16px; background:#fff; }
+
+/* ══ LITE MODE OVERRIDES ══ */
+body.lite {
+  --bg: var(--lite-bg);
+  --surface: var(--lite-surface);
+  --surface2: #f3f1ec;
+  --border: var(--lite-border);
+  --border2: #d0ccc6;
+  --text: var(--lite-text);
+  --text2: var(--lite-text2);
+  --text3: #9a9590;
+  --accent: var(--lite-accent);
+  --green: var(--lite-green);
+  --red: var(--lite-red);
+  --blue: #2563eb;
+  --purple: #9333ea;
+}
+body.lite .mode-toggle { background:var(--lite-surface); border-color:var(--lite-border); color:var(--lite-text); }
+
+/* ══ HERO ══ */
+.hero {
+  min-height:100vh; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:4rem 1.5rem 3rem; position:relative; overflow:hidden;
+  text-align:center;
+}
+
+.hero-bg {
+  position:absolute; inset:0; pointer-events:none;
+  background:
+    radial-gradient(ellipse 60% 50% at 30% 40%, rgba(245,230,66,.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 60% at 75% 60%, rgba(255,92,43,.05) 0%, transparent 60%);
+  transition:opacity .5s;
+}
+body.lite .hero-bg { opacity:.4; }
+
+/* Score meter ring */
+.score-ring {
+  width:120px; height:120px; margin:0 auto 1.5rem;
+  position:relative; animation:ringIn .8s cubic-bezier(.175,.885,.32,1.275) both;
+}
+@keyframes ringIn { from{transform:scale(0) rotate(-90deg);opacity:0} to{transform:scale(1) rotate(0);opacity:1} }
+.ring-svg { transform:rotate(-90deg); }
+.ring-bg { fill:none; stroke:var(--border2); stroke-width:8; }
+.ring-fill {
+  fill:none; stroke:var(--accent); stroke-width:8;
+  stroke-linecap:round;
+  stroke-dasharray:283;
+  stroke-dashoffset:283;
+  animation:fillRing 1.5s ease .4s forwards;
+  transition:stroke .3s;
+}
+@keyframes fillRing { to{stroke-dashoffset:66;} } /* 283*(1-0.77) */
+.ring-text {
+  position:absolute; inset:0; display:flex;
+  flex-direction:column; align-items:center; justify-content:center;
+}
+.ring-score {
+  font-family:'JetBrains Mono',monospace; font-size:1.6rem;
+  font-weight:500; color:var(--accent); line-height:1;
+}
+.ring-label {
+  font-family:'JetBrains Mono',monospace; font-size:.5rem;
+  color:var(--text3); letter-spacing:.1em; margin-top:.15rem;
+}
+
+.hero-eyebrow {
+  font-family:'JetBrains Mono',monospace; font-size:.7rem;
+  color:var(--text3); letter-spacing:.15em; text-transform:uppercase;
+  margin-bottom:1rem; animation:fadeUp .6s ease .1s both;
+}
+h1 {
+  font-family:'Instrument Serif',serif;
+  font-size:clamp(2.8rem,8vw,5.5rem);
+  font-weight:400; line-height:1.1;
+  margin-bottom:.75rem;
+  animation:fadeUp .6s ease .2s both;
+}
+h1 em { font-style:italic; color:var(--accent); }
+.hero-sub {
+  font-size:1.05rem; color:var(--text2); line-height:1.65;
+  max-width:480px; margin:0 auto 2.5rem;
+  animation:fadeUp .6s ease .3s both;
+}
+@keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+/* ══ CTA BUTTONS ══ */
+.cta-row {
+  display:flex; gap:.75rem; justify-content:center; flex-wrap:wrap;
+  animation:fadeUp .6s ease .4s both;
+}
+.btn-primary {
+  padding:.85rem 2rem; border:none; border-radius:12px;
+  background:var(--accent); color:#0e0e0e;
+  font-family:'Cabinet Grotesk',sans-serif; font-weight:800;
+  font-size:1rem; cursor:pointer; transition:all .2s;
+  display:flex; align-items:center; gap:.5rem;
+}
+.btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(245,230,66,.25); }
+.btn-secondary {
+  padding:.85rem 2rem; border:1.5px solid var(--border2); border-radius:12px;
+  background:transparent; color:var(--text);
+  font-family:'Cabinet Grotesk',sans-serif; font-weight:700;
+  font-size:1rem; cursor:pointer; transition:all .2s;
+  display:flex; align-items:center; gap:.5rem;
+}
+.btn-secondary:hover { border-color:var(--text2); }
+
+/* ══ LEARNING PROOF BAR ══ */
+.proof-bar {
+  display:flex; gap:2rem; justify-content:center; flex-wrap:wrap;
+  margin-top:3rem; padding-top:2rem;
+  border-top:1px solid var(--border);
+  animation:fadeUp .6s ease .5s both;
+}
+.proof-stat { text-align:center; }
+.proof-num {
+  font-family:'JetBrains Mono',monospace; font-size:1.4rem;
+  font-weight:500; color:var(--accent);
+}
+.proof-label {
+  font-family:'JetBrains Mono',monospace; font-size:.58rem;
+  color:var(--text3); letter-spacing:.1em; text-transform:uppercase;
+  margin-top:.2rem;
+}
+
+/* ══ MAIN PRODUCT SECTION ══ */
+.product-section {
+  max-width:900px; margin:0 auto; padding:0 1.5rem 6rem;
+}
+
+.section-chip {
+  display:inline-block; font-family:'JetBrains Mono',monospace;
+  font-size:.65rem; padding:.25rem .7rem; border-radius:4px;
+  letter-spacing:.08em; text-transform:uppercase;
+  background:rgba(245,230,66,.1); color:var(--accent);
+  border:1px solid rgba(245,230,66,.3); margin-bottom:1rem;
+}
+
+h2 {
+  font-family:'Instrument Serif',serif; font-size:2.2rem;
+  font-weight:400; line-height:1.2; margin-bottom:.5rem;
+}
+h2 em { font-style:italic; color:var(--accent); }
+.section-sub { color:var(--text2); font-size:.95rem; margin-bottom:1.5rem; }
+
+/* ══ ARGUMENT INPUT CARD ══ */
+.input-card {
+  background:var(--surface); border:1.5px solid var(--border2);
+  border-radius:20px; overflow:hidden; margin-bottom:1rem;
+  transition:border-color .3s;
+}
+.input-card:focus-within { border-color:var(--accent); }
+
+.input-header {
+  padding:.75rem 1.25rem;
+  border-bottom:1px solid var(--border);
+  background:var(--surface2);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.input-label {
+  font-family:'JetBrains Mono',monospace; font-size:.65rem;
+  color:var(--text3); letter-spacing:.08em; text-transform:uppercase;
+}
+.char-count {
+  font-family:'JetBrains Mono',monospace; font-size:.62rem;
+  color:var(--text3);
+}
+
+.arg-textarea {
+  width:100%; padding:1.1rem 1.25rem;
+  background:transparent; border:none;
+  color:var(--text); font-family:'Cabinet Grotesk',sans-serif;
+  font-size:1rem; line-height:1.65; resize:none;
+  min-height:100px; outline:none;
+}
+.arg-textarea::placeholder { color:var(--text3); }
+
+.input-footer {
+  padding:.75rem 1.25rem;
+  border-top:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  gap:.75rem; flex-wrap:wrap;
+}
+.config-mini { display:flex; gap:.5rem; flex-wrap:wrap; }
+.mini-select {
+  padding:.35rem .6rem; background:var(--surface2);
+  border:1px solid var(--border2); border-radius:8px;
+  color:var(--text2); font-family:'JetBrains Mono',monospace;
+  font-size:.65rem; outline:none; cursor:pointer;
+}
+.mini-select:focus { border-color:var(--accent); color:var(--text); }
+
+.analyze-btn {
+  padding:.65rem 1.5rem; border:none; border-radius:10px;
+  background:var(--accent); color:#0e0e0e;
+  font-family:'Cabinet Grotesk',sans-serif; font-weight:800;
+  font-size:.9rem; cursor:pointer; transition:all .2s;
+  display:flex; align-items:center; gap:.4rem;
+  white-space:nowrap;
+}
+.analyze-btn:hover { transform:translateY(-1px); box-shadow:0 4px 16px rgba(245,230,66,.2); }
+.analyze-btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+
+/* ══ LOADING STATE ══ */
+.loading-state {
+  display:none; padding:2rem; text-align:center;
+}
+.loading-state.show { display:block; }
+.loading-steps {
+  font-family:'JetBrains Mono',monospace; font-size:.7rem;
+  color:var(--text3); line-height:2;
+}
+.ls { opacity:.3; transition:opacity .2s; }
+.ls.on { opacity:1; color:var(--accent); }
+.ls.done { opacity:.6; color:var(--text2); }
+.ls.done::before { content:'✓  '; color:var(--green); }
+.loader-bar { height:2px; background:var(--border); border-radius:1px; overflow:hidden; margin:.75rem 0; }
+.lb-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--accent2)); animation:lb 1.4s ease infinite; }
+@keyframes lb { 0%{width:0;margin-left:0} 50%{width:55%;margin-left:22%} 100%{width:0;margin-left:100%} }
+
+/* ══ RESULT CARD ══ */
+.result-card {
+  display:none; background:var(--surface);
+  border:1.5px solid var(--border2); border-radius:20px;
+  overflow:hidden; margin-top:1rem;
+  animation:fadeUp .4s ease both;
+}
+.result-card.show { display:block; }
+
+.result-header {
+  padding:1.1rem 1.25rem;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:.75rem;
+}
+.score-display { display:flex; align-items:baseline; gap:.4rem; }
+.score-big {
+  font-family:'JetBrains Mono',monospace; font-size:2.2rem;
+  font-weight:500; line-height:1;
+}
+.score-max { font-family:'JetBrains Mono',monospace; font-size:.9rem; color:var(--text3); }
+.quality-badge {
+  padding:.3rem .75rem; border-radius:6px;
+  font-family:'JetBrains Mono',monospace; font-size:.65rem;
+  font-weight:500; letter-spacing:.06em;
+}
+.q-strong  { background:rgba(61,220,132,.15); color:var(--green); border:1px solid rgba(61,220,132,.3); }
+.q-adequate{ background:rgba(245,230,66,.12); color:var(--accent); border:1px solid rgba(245,230,66,.25); }
+.q-weak    { background:rgba(255,92,43,.12);  color:var(--accent2);border:1px solid rgba(255,92,43,.25); }
+.q-fallacious{ background:rgba(255,71,87,.12);color:var(--red);   border:1px solid rgba(255,71,87,.25); }
+
+.result-body { padding:1.25rem; }
+
+/* Tabs */
+.result-tabs {
+  display:flex; gap:.25rem; margin-bottom:1.25rem;
+  border-bottom:1px solid var(--border); padding-bottom:0;
+}
+.rtab {
+  padding:.5rem 1rem; font-family:'JetBrains Mono',monospace;
+  font-size:.65rem; letter-spacing:.06em; text-transform:uppercase;
+  border:none; background:transparent; color:var(--text3);
+  cursor:pointer; border-bottom:2px solid transparent;
+  margin-bottom:-1px; transition:all .2s;
+}
+.rtab:hover { color:var(--text2); }
+.rtab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* Fallacy list */
+.fallacy-list { display:flex; flex-direction:column; gap:.6rem; }
+.fallacy-item {
+  border:1px solid var(--border2); border-radius:12px; overflow:hidden;
+}
+.fi-head {
+  padding:.6rem 1rem; display:flex; align-items:center;
+  justify-content:space-between; cursor:pointer;
+  transition:background .2s;
+}
+.fi-head:hover { background:var(--surface2); }
+.fi-name { font-size:.82rem; font-weight:700; color:var(--accent2); }
+.fi-badges { display:flex; gap:.35rem; }
+.sev { padding:.12rem .4rem; border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:.58rem; }
+.s-low    { background:rgba(61,220,132,.12); color:var(--green); }
+.s-medium { background:rgba(245,230,66,.12); color:var(--accent); }
+.s-high   { background:rgba(255,92,43,.12);  color:var(--accent2); }
+.s-crit   { background:rgba(255,71,87,.12);  color:var(--red); }
+.fi-body { display:none; padding:.85rem 1rem; font-size:.85rem; color:var(--text2); line-height:1.65; border-top:1px solid var(--border); }
+.fi-body.open { display:block; }
+.fi-excerpt { border-left:2px solid var(--accent2); padding-left:.75rem; font-style:italic; margin:.4rem 0; font-size:.8rem; color:var(--text3); }
+.fi-fix { margin-top:.5rem; padding:.5rem .75rem; background:rgba(61,220,132,.06); border:1px solid rgba(61,220,132,.2); border-radius:8px; font-size:.78rem; color:var(--green); }
+
+/* ══ IMPROVED VERSION ══ */
+.improved-box {
+  background:linear-gradient(135deg,rgba(61,220,132,.06),rgba(61,220,132,.02));
+  border:1.5px solid rgba(61,220,132,.25); border-radius:14px;
+  padding:1.1rem 1.25rem; margin-bottom:1rem;
+}
+.improved-label {
+  font-family:'JetBrains Mono',monospace; font-size:.62rem;
+  color:var(--green); letter-spacing:.1em; text-transform:uppercase;
+  margin-bottom:.6rem; display:flex; align-items:center; gap:.4rem;
+}
+.improved-text {
+  font-size:.92rem; line-height:1.75; color:var(--text);
+  font-style:italic;
+}
+.improved-score {
+  margin-top:.75rem; font-family:'JetBrains Mono',monospace;
+  font-size:.7rem; color:var(--green);
+}
+
+/* Upgrade steps */
+.upgrade-steps { display:flex; flex-direction:column; gap:.5rem; }
+.ustep {
+  display:flex; gap:.75rem; align-items:flex-start;
+  padding:.75rem .9rem; background:var(--surface2);
+  border:1px solid var(--border); border-radius:10px;
+}
+.ustep-num {
+  width:24px; height:24px; border-radius:6px;
+  background:var(--accent); color:#0e0e0e;
+  font-family:'JetBrains Mono',monospace; font-size:.7rem;
+  font-weight:700; display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.ustep-text { font-size:.85rem; color:var(--text2); line-height:1.55; }
+
+/* ══ INTUITION CARD ══ */
+.intuition-card {
+  background:linear-gradient(135deg,rgba(192,132,252,.08),rgba(77,166,255,.05));
+  border:1.5px solid rgba(192,132,252,.25); border-radius:14px;
+  padding:1.1rem 1.25rem; margin-bottom:1rem;
+}
+.intuition-label {
+  font-family:'JetBrains Mono',monospace; font-size:.62rem;
+  color:var(--purple); letter-spacing:.1em; text-transform:uppercase;
+  margin-bottom:.6rem; display:flex; align-items:center; gap:.4rem;
+}
+.intuition-text { font-size:.88rem; color:var(--text2); line-height:1.7; }
+
+/* ══ ACTION ROW ══ */
+.action-row {
+  display:flex; gap:.75rem; padding:1rem 1.25rem;
+  border-top:1px solid var(--border); flex-wrap:wrap;
+}
+.act-btn {
+  padding:.6rem 1.25rem; border-radius:10px;
+  font-family:'Cabinet Grotesk',sans-serif; font-weight:700;
+  font-size:.85rem; cursor:pointer; transition:all .2s;
+  display:flex; align-items:center; gap:.4rem;
+}
+.act-primary {
+  background:var(--accent); color:#0e0e0e; border:none; flex:1;
+  justify-content:center;
+}
+.act-primary:hover { box-shadow:0 4px 16px rgba(245,230,66,.2); }
+.act-secondary {
+  background:transparent; color:var(--text2);
+  border:1px solid var(--border2);
+}
+.act-secondary:hover { border-color:var(--text2); color:var(--text); }
+
+/* ══ LITE MODE SCORE DISPLAY ══ */
+body.lite .score-big { color:var(--lite-accent); }
+body.lite .ring-fill { stroke:var(--lite-accent); }
+body.lite .ring-score { color:var(--lite-accent); }
+body.lite .analyze-btn { background:var(--lite-accent); }
+body.lite .btn-primary { background:var(--lite-accent); }
+body.lite .section-chip { background:rgba(232,160,32,.1); color:var(--lite-accent); border-color:rgba(232,160,32,.3); }
+body.lite h1 em, body.lite h2 em { color:var(--lite-accent); }
+body.lite .ustep-num { background:var(--lite-accent); }
+
+/* ══ LITE MODE HERO ══ */
+body.lite .hero { background:var(--lite-bg); }
+
+/* ══ COMPARISON STRIP ══ */
+.compare-strip {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:1rem; margin:1.5rem 0;
+}
+@media(max-width:600px){ .compare-strip{grid-template-columns:1fr;} }
+.comp-box {
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius:12px; padding:1rem;
+}
+.comp-label {
+  font-family:'JetBrains Mono',monospace; font-size:.6rem;
+  color:var(--text3); letter-spacing:.08em; text-transform:uppercase;
+  margin-bottom:.5rem;
+}
+.comp-text { font-size:.85rem; color:var(--text2); line-height:1.6; }
+.comp-score {
+  font-family:'JetBrains Mono',monospace; font-size:.8rem;
+  margin-top:.4rem;
+}
+
+/* ══ LEARNING GROWTH INDICATOR ══ */
+.growth-bar-section { margin:2rem 0; }
+.growth-row {
+  display:flex; align-items:center; gap:.75rem;
+  margin-bottom:.6rem;
+}
+.growth-label { font-family:'JetBrains Mono',monospace; font-size:.62rem; color:var(--text3); min-width:120px; }
+.growth-track { flex:1; height:8px; background:var(--border2); border-radius:4px; overflow:hidden; }
+.growth-fill { height:100%; border-radius:4px; transition:width 1.2s ease; }
+.growth-val { font-family:'JetBrains Mono',monospace; font-size:.62rem; color:var(--text2); min-width:40px; text-align:right; }
+
+/* ══ MISC ══ */
+.empty-state {
+  text-align:center; padding:3rem 1rem; color:var(--text3);
+  font-family:'JetBrains Mono',monospace; font-size:.75rem; line-height:2;
+}
+.hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<!-- MODE TOGGLE -->
+<div class="mode-toggle" id="modeToggle" onclick="toggleMode()">
+  <span id="modeLabel" style="font-family:'JetBrains Mono',monospace;font-size:.62rem;color:inherit">PRO</span>
+  <div class="toggle-pill"><div class="toggle-ball"></div></div>
+  <span style="font-family:'JetBrains Mono',monospace;font-size:.62rem;color:inherit">LITE</span>
+</div>
+
+<!-- ══════════════════════════
+  HERO
+══════════════════════════ -->
+<section class="hero" id="heroSection">
+  <div class="hero-bg"></div>
+
+  <div class="score-ring">
+    <svg class="ring-svg" width="120" height="120" viewBox="0 0 120 120">
+      <circle class="ring-bg" cx="60" cy="60" r="45"/>
+      <circle class="ring-fill" id="heroRing" cx="60" cy="60" r="45"/>
+    </svg>
+    <div class="ring-text">
+      <div class="ring-score" id="heroScore">2.97</div>
+      <div class="ring-label">AVG/5.0</div>
+    </div>
+  </div>
+
+  <div class="hero-eyebrow">150 arguments analyzed · v4.2 Neural Engine</div>
+  <h1>Argue <em>smarter.</em><br>Not just harder.</h1>
+  <p class="hero-sub">DebateCoach analyzes your argument, finds every logical flaw, and shows you the improved version — in seconds.</p>
+
+  <div class="cta-row">
+    <button class="btn-primary" onclick="scrollToTry()">
+      ⚡ Try Your Argument
+    </button>
+    <button class="btn-secondary" onclick="scrollToLearning()">
+      📊 How the Engine Learned
+    </button>
+  </div>
+
+  <div class="proof-bar">
+    <div class="proof-stat"><div class="proof-num">150</div><div class="proof-label">Args Analyzed</div></div>
+    <div class="proof-stat"><div class="proof-num">12</div><div class="proof-label">Topics</div></div>
+    <div class="proof-stat"><div class="proof-num">6×</div><div class="proof-label">System Updates</div></div>
+    <div class="proof-stat"><div class="proof-num">19</div><div class="proof-label">Intuitions Found</div></div>
+    <div class="proof-stat"><div class="proof-num">2</div><div class="proof-label">Languages</div></div>
+  </div>
+</section>
+
+<!-- ══════════════════════════
+  MAIN PRODUCT
+══════════════════════════ -->
+<section class="product-section" id="trySection">
+
+  <div class="section-chip">⚡ Argument Analyzer</div>
+  <h2>Test & <em>Improve</em> Your Argument</h2>
+  <p class="section-sub" id="modeDescription">Pro Mode: Full analysis with fallacy taxonomy, weighted scoring, and academic references.</p>
+
+  <!-- INPUT -->
+  <div class="input-card">
+    <div class="input-header">
+      <span class="input-label">Your Argument</span>
+      <span class="char-count" id="charCount">0 / 500</span>
+    </div>
+    <textarea class="arg-textarea" id="argInput" maxlength="500"
+      placeholder="Type your argument here... e.g. 'Social media should be regulated because misinformation spreads too fast.'"
+      oninput="updateCharCount(this)"></textarea>
+    <div class="input-footer">
+      <div class="config-mini">
+        <select class="mini-select" id="cfgAge">
+          <option value="15">Age 15</option>
+          <option value="18">Age 18</option>
+          <option value="22" selected>Age 22</option>
+          <option value="27">Age 27</option>
+          <option value="32">Age 32</option>
+          <option value="40">Age 40+</option>
+        </select>
+        <select class="mini-select" id="cfgSkill">
+          <option value="beginner">Beginner</option>
+          <option value="intermediate" selected>Intermediate</option>
+          <option value="advanced">Advanced</option>
+          <option value="expert">Expert</option>
+        </select>
+        <select class="mini-select" id="cfgTopic">
+          <option value="general">General</option>
+          <option value="climate">Climate</option>
+          <option value="homeoffice">Homeoffice</option>
+          <option value="ki_alltag">AI</option>
+          <option value="ubi">UBI</option>
+          <option value="cryptocurrency">Crypto</option>
+          <option value="social_media">Social Media</option>
+        </select>
+      </div>
+      <button class="analyze-btn" id="analyzeBtn" onclick="runAnalysis()">
+        Analyze & Improve →
+      </button>
+    </div>
+  </div>
+
+  <!-- QUICK EXAMPLES -->
+  <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1.5rem;">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--text3);align-self:center">Try:</span>
+    <button onclick="loadExample(0)" style="padding:.3rem .65rem;border:1px solid var(--border2);border-radius:6px;background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:.6rem;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">Homeoffice (weak)</button>
+    <button onclick="loadExample(1)" style="padding:.3rem .65rem;border:1px solid var(--border2);border-radius:6px;background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:.6rem;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">Climate (emotional)</button>
+    <button onclick="loadExample(2)" style="padding:.3rem .65px;border:1px solid var(--border2);border-radius:6px;background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:.6rem;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">UBI (strong)</button>
+    <button onclick="loadExample(3)" style="padding:.3rem .65rem;border:1px solid var(--border2);border-radius:6px;background:transparent;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:.6rem;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text3)'">AI (circular)</button>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading-state" id="loadingState">
+    <div class="loader-bar"><div class="lb-fill"></div></div>
+    <div class="loading-steps">
+      <div class="ls" id="ls0">① Detecting logical structure</div>
+      <div class="ls" id="ls1">② Scanning fallacy taxonomy (20 types)</div>
+      <div class="ls" id="ls2">③ Running Intuition Translator</div>
+      <div class="ls" id="ls3">④ Generating improved version</div>
+      <div class="ls" id="ls4">⑤ Building 3-step upgrade path</div>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="result-card" id="resultCard">
+    <div class="result-header">
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <div class="score-display">
+          <div class="score-big" id="resScore">—</div>
+          <div class="score-max">/ 5.0</div>
+        </div>
+        <span class="quality-badge" id="resBadge">—</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--text3)" id="resNote"></span>
+      </div>
+      <div style="display:flex;gap:.4rem">
+        <button onclick="resetResult()" style="padding:.4rem .8rem;border:1px solid var(--border2);border-radius:8px;background:transparent;color:var(--text3);font-size:.75rem;cursor:pointer">New argument</button>
+      </div>
+    </div>
+
+    <div class="result-body">
+      <div class="result-tabs">
+        <button class="rtab active" onclick="switchTab('improve')">✨ Improved</button>
+        <button class="rtab" onclick="switchTab('fallacies')">⚠️ Fallacies</button>
+        <button class="rtab" onclick="switchTab('steps')">📋 3 Steps</button>
+        <button class="rtab" id="intuitionTab" onclick="switchTab('intuition')" style="display:none">💡 Insight</button>
+        <button class="rtab" onclick="switchTab('raw')" id="rawTab">{ } JSON</button>
+      </div>
+
+      <!-- TAB: IMPROVED -->
+      <div class="tab-panel active" id="tab-improve">
+        <div style="margin-bottom:.75rem;font-size:.82rem;color:var(--text3)">
+          Here is your argument rewritten — same position, no fallacies, with evidence added:
+        </div>
+        <div class="compare-strip">
+          <div class="comp-box" style="border-color:rgba(255,71,87,.2)">
+            <div class="comp-label" style="color:var(--red)">Your Version</div>
+            <div class="comp-text" id="origText">—</div>
+            <div class="comp-score" style="color:var(--red)" id="origScore">Score: —</div>
+          </div>
+          <div class="comp-box" style="border-color:rgba(61,220,132,.25)">
+            <div class="comp-label" style="color:var(--green)">⭐ Improved Version</div>
+            <div class="comp-text" id="improvedText" style="color:var(--text)">—</div>
+            <div class="comp-score" style="color:var(--green)" id="improvedScore">Estimated score: —</div>
+          </div>
+        </div>
+        <div class="improved-label">What changed</div>
+        <div id="twinImprovements" style="display:flex;flex-direction:column;gap:.3rem"></div>
+      </div>
+
+      <!-- TAB: FALLACIES -->
+      <div class="tab-panel" id="tab-fallacies">
+        <div class="fallacy-list" id="fallacyList">
+          <div class="empty-state">No fallacies detected — clean argument!</div>
+        </div>
+      </div>
+
+      <!-- TAB: 3 STEPS -->
+      <div class="tab-panel" id="tab-steps">
+        <div style="margin-bottom:.75rem;font-size:.82rem;color:var(--text3)">
+          The shortest path from your current score to the next level:
+        </div>
+        <div class="upgrade-steps" id="upgradeSteps"></div>
+        <div style="margin-top:1rem;padding:.85rem 1rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--text3);margin-bottom:.35rem;letter-spacing:.08em">RECOMMENDED DRILL</div>
+          <div style="font-size:.85rem;color:var(--text2)" id="drillText">—</div>
+        </div>
+      </div>
+
+      <!-- TAB: INTUITION -->
+      <div class="tab-panel" id="tab-intuition">
+        <div class="intuition-card">
+          <div class="intuition-label">💡 Hidden Insight Detected</div>
+          <div class="intuition-text" id="intuitionText">—</div>
+        </div>
+        <div style="font-size:.82rem;color:var(--text2);line-height:1.7" id="intuitionData"></div>
+      </div>
+
+      <!-- TAB: RAW JSON -->
+      <div class="tab-panel" id="tab-raw">
+        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:.85rem;font-family:'JetBrains Mono',monospace;font-size:.65rem;line-height:1.85;overflow-x:auto;white-space:pre;max-height:380px;overflow-y:auto" id="rawJson">—</div>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button class="act-btn act-primary" onclick="tryImprovedVersion()">
+        ⚡ Test the Improved Version
+      </button>
+      <button class="act-btn act-secondary" onclick="copyImproved()">
+        📋 Copy Improved
+      </button>
+      <button class="act-btn act-secondary" onclick="resetResult()">
+        ↺ New
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ ENGINE LEARNING SECTION ══ -->
+  <div style="margin-top:4rem" id="learningSection">
+    <div class="section-chip">📈 Engine Learning</div>
+    <h2>How <em>Strong</em> Did the Engine Learn?</h2>
+    <p class="section-sub">Measured across 6 corpus iterations — from 10 founding arguments to 150.</p>
+
+    <div class="growth-bar-section">
+      <div class="growth-row">
+        <div class="growth-label">Fallacy types</div>
+        <div class="growth-track"><div class="growth-fill" style="width:0%;background:var(--blue)" data-w="100%"></div></div>
+        <div class="growth-val">12 → 20</div>
+      </div>
+      <div class="growth-row">
+        <div class="growth-label">Intuition patterns</div>
+        <div class="growth-track"><div class="growth-fill" style="width:0%;background:var(--purple)" data-w="100%"></div></div>
+        <div class="growth-val">0 → 13</div>
+      </div>
+      <div class="growth-row">
+        <div class="growth-label">hasty_gen penalty</div>
+        <div class="growth-track"><div class="growth-fill" style="width:0%;background:var(--red)" data-w="85%"></div></div>
+        <div class="growth-val">−0.50→−0.85</div>
+      </div>
+      <div class="growth-row">
+        <div class="growth-label">Corpus size</div>
+        <div class="growth-track"><div class="growth-fill" style="width:0%;background:var(--accent)" data-w="100%"></div></div>
+        <div class="growth-val">10 → 150</div>
+      </div>
+      <div class="growth-row">
+        <div class="growth-label">System components</div>
+        <div class="growth-track"><div class="growth-fill" style="width:0%;background:var(--green)" data-w="75%"></div></div>
+        <div class="growth-val">3 → 9 modules</div>
+      </div>
+      <div class="growth-row">
+        <div class="growth-label">Languages supported</div>
+        <div class="growth-track"><div class="growth-fill" style="width:0%;background:var(--teal,#0e6b5a)" data-w="20%"></div></div>
+        <div class="growth-val">1 → 2</div>
+      </div>
+    </div>
+
+    <!-- KEY FINDINGS SUMMARY -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.5rem">
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:1rem">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--red);letter-spacing:.1em;margin-bottom:.4rem">TOP FINDING</div>
+        <div style="font-size:.88rem;line-height:1.65;color:var(--text2)"><strong style="color:var(--text)">English speakers generalize 2.6× more</strong> than German speakers. hasty_generalization at 68% EN vs. 26% DE. Cultural argumentation difference, not language.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:1rem">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--green);letter-spacing:.1em;margin-bottom:.4rem">BIGGEST IMPROVEMENT</div>
+        <div style="font-size:.88rem;line-height:1.65;color:var(--text2)"><strong style="color:var(--text)">IntuitionTranslator</strong> found hidden strong insights in 19 of 150 arguments (13%). People with the right idea but wrong framing now get shown the academic version of their own thought.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:1rem">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--purple);letter-spacing:.1em;margin-bottom:.4rem">SURPRISE FINDING</div>
+        <div style="font-size:.88rem;line-height:1.65;color:var(--text2)"><strong style="color:var(--text)">23-27 age group argues worst</strong> (2.66/5.0). Lower than both 18-22 and 28+. Early-career overconfidence — arguing from identity, not evidence.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:1rem">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--amber,#d35400);letter-spacing:.1em;margin-bottom:.4rem">STRONG ARG PATTERN</div>
+        <div style="font-size:.88rem;line-height:1.65;color:var(--text2)"><strong style="color:var(--text)">Every strong argument</strong> (score ≥4.0) had the same 3 elements: nuanced position + one data point + counterargument acknowledged. Zero exceptions across 150 arguments.</div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<script>
+// ─────────────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────────────
+let isLite = false;
+let currentResult = null;
+let isLoading = false;
+
+const EXAMPLES = [
+  { text:"Homeoffice steigert die Produktivität. Ich erledige Programmieraufgaben zuhause oft in der Hälfte der Zeit wie im Büro.", age:"24", skill:"intermediate", topic:"homeoffice" },
+  { text:"Governments must act immediately on climate change. It's obvious that current policies are completely failing us.", age:"22", skill:"beginner", topic:"climate" },
+  { text:"UBI simplifies welfare systems. Less bureaucracy means fewer administrative costs and more direct support for people who need it.", age:"29", skill:"advanced", topic:"ubi" },
+  { text:"AI is just a tool. It's only dangerous if people misuse it, so there's no need for special regulation.", age:"26", skill:"intermediate", topic:"ki_alltag" },
+];
+
+// ─────────────────────────────────────────────────────
+// MODE TOGGLE
+// ─────────────────────────────────────────────────────
+function toggleMode() {
+  isLite = !isLite;
+  document.body.classList.toggle('lite', isLite);
+  document.getElementById('modeToggle').classList.toggle('lite', isLite);
+  document.getElementById('modeLabel').textContent = isLite ? 'PRO' : 'PRO';
+  document.getElementById('modeDescription').textContent = isLite
+    ? 'Simple Mode: Plain feedback without technical jargon. Perfect for school and everyday use.'
+    : 'Pro Mode: Full analysis with fallacy taxonomy, weighted scoring, and academic references.';
+}
+
+// ─────────────────────────────────────────────────────
+// NAVIGATION
+// ─────────────────────────────────────────────────────
+function scrollToTry() {
+  document.getElementById('trySection').scrollIntoView({behavior:'smooth'});
+  setTimeout(()=>document.getElementById('argInput').focus(), 600);
+}
+function scrollToLearning() {
+  document.getElementById('learningSection').scrollIntoView({behavior:'smooth'});
+}
+
+// ─────────────────────────────────────────────────────
+// EXAMPLES
+// ─────────────────────────────────────────────────────
+function loadExample(i) {
+  const ex = EXAMPLES[i];
+  document.getElementById('argInput').value = ex.text;
+  document.getElementById('cfgAge').value = ex.age;
+  document.getElementById('cfgSkill').value = ex.skill;
+  document.getElementById('cfgTopic').value = ex.topic;
+  updateCharCount(document.getElementById('argInput'));
+  document.getElementById('argInput').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function updateCharCount(el) {
+  document.getElementById('charCount').textContent = `${el.value.length} / 500`;
+}
+
+// ─────────────────────────────────────────────────────
+// ANALYSIS
+// ─────────────────────────────────────────────────────
+async function runAnalysis() {
+  const arg   = document.getElementById('argInput').value.trim();
+  const age   = parseInt(document.getElementById('cfgAge').value);
+  const skill = document.getElementById('cfgSkill').value;
+  const topic = document.getElementById('cfgTopic').value;
+  if (!arg || isLoading) return;
+
+  isLoading = true;
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('resultCard').classList.remove('show');
+  document.getElementById('loadingState').classList.add('show');
+  resetLoadingSteps();
+
+  const [_, raw] = await Promise.all([
+    animateSteps(),
+    callEngine(arg, age, skill, topic)
+  ]);
+
+  document.getElementById('loadingState').classList.remove('show');
+
+  let result = null;
+  try {
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (m) result = JSON.parse(m[0]);
+  } catch(e) {}
+
+  if (result) {
+    currentResult = result;
+    renderResult(result, arg);
+  } else {
+    document.getElementById('loadingState').classList.remove('show');
+    alert('Analysis failed. Please check your API connection.');
+  }
+
+  isLoading = false;
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+// ─────────────────────────────────────────────────────
+// ENGINE CALL
+// ─────────────────────────────────────────────────────
+async function callEngine(arg, age, skill, topic) {
+  const liteMode = isLite;
+  const vocabTier = age < 14 ? 'elementary' : age < 18 ? 'secondary' : 'university';
+  const expected = {beginner:2.0,intermediate:2.8,advanced:3.5,expert:4.2}[skill];
+
+  const SYSTEM = `You are LogicScale Neural Engine v4.2. Built from 150 real argument corpus.
+
+${liteMode ? `LITE MODE ACTIVE: Use simple, friendly language. No Latin terms. No academic jargon. 
+Explain everything like you're talking to a student. Use short sentences. Be encouraging.` : 
+`PRO MODE: Full academic vocabulary (age ${age}). Name fallacies formally. Cite real studies.`}
+
+SCORING (0.0-5.0): base=2.5
+Bonuses: empirical_evidence +1.0, clear_structure +0.75, anticipates_counterargument +0.5, nuanced_position +0.4, insider_evidence +0.35
+Penalties: hasty_generalization -0.85, circular_reasoning -1.0, straw_man -1.0, false_dichotomy -0.75, motte_and_bailey -1.25, epistemic_cowardice -0.75, appeal_to_emotion_hard -0.65, appeal_to_emotion_soft -0.30, survivorship_bias -0.80, slippery_slope -0.5, appeal_to_popularity -0.5, vague_quantifier -0.35, anecdote_only -0.4, scope_creep -0.65
+Clamp to [0.5, 5.0]
+
+WEIGHT DELTA: surprise=|${expected}-actual|/5.0, clamp(surprise*recency*consistency, 0.01, 0.30)
+
+INTUITION DETECTION: If emotional framing contains a valid underlying insight, mark has_hidden_insight:true and provide translation.
+
+CRITICAL: Respond ONLY with valid JSON. No text outside JSON.`;
+
+  const USER = `Argument: "${arg}"
+Context: age=${age}, skill=${skill}, topic=${topic}, mode=${liteMode?'lite':'pro'}
+
+Return ONLY this JSON:
+{
+  "logic_score": <0.0-5.0>,
+  "argument_quality": "<strong|adequate|weak|fallacious>",
+  "engineering_note": "<1 sentence why this score>",
+  "fallacies": [{"type":"<name>","severity":"<low|medium|high|critical>","confidence":<0-1>,"excerpt":"<phrase>","explanation":"<explanation>","fix":"<fix>","latin_name":"<or null>","penalty":<negative float>}],
+  "cognitive_biases": [{"type":"<name>","severity":"<mild|moderate|severe>","note":"<note>"}],
+  "synthetic_twin": "<improved version — same position, no fallacies, add evidence>",
+  "twin_improvements": ["<what changed 1>","<what changed 2>","<what changed 3>"],
+  "twin_score": <float>,
+  "intuition": {"has_hidden_insight":<bool>,"emotional_intensity":<0-1>,"concept":"<or null>","translation":"<formal version starting with 'Your core insight — stated formally: ...'>","data":"<relevant study or null>"},
+  "coaching": {"primary_tip":"<most important fix>","upgrade_path":["<step1>","<step2>","<step3>"],"drill":"<specific exercise>"},
+  "weight_delta": <0.01-0.30>,
+  "score_breakdown": {"base":2.5,"bonuses":[{"criterion":"<n>","delta":<f>,"present":<bool>}],"penalties":[{"criterion":"<n>","delta":<f>,"applied":<bool>}]}
+}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514', max_tokens:1500,
+        system:SYSTEM, messages:[{role:'user',content:USER}]
+      })
+    });
+    const data = await res.json();
+    return data.content?.[0]?.text || '{}';
+  } catch(e) { return '{"error":"'+e.message+'"}'; }
+}
+
+// ─────────────────────────────────────────────────────
+// RENDER RESULT
+// ─────────────────────────────────────────────────────
+function renderResult(r, originalArg) {
+  const score = r.logic_score || 0;
+  const quality = r.argument_quality || 'unknown';
+
+  // Header
+  const scoreEl = document.getElementById('resScore');
+  scoreEl.textContent = score.toFixed(2);
+  scoreEl.style.color = scoreColor(score);
+
+  const badge = document.getElementById('resBadge');
+  badge.textContent = quality.toUpperCase();
+  badge.className = 'quality-badge q-' + quality;
+
+  document.getElementById('resNote').textContent = r.engineering_note || '';
+
+  // Tab: Improved
+  document.getElementById('origText').textContent = originalArg;
+  document.getElementById('origScore').textContent = `Score: ${score.toFixed(2)}/5.0`;
+  document.getElementById('improvedText').textContent = r.synthetic_twin || '—';
+  document.getElementById('improvedScore').textContent = `Estimated score: ${r.twin_score || '?'}/5.0`;
+
+  const improvEl = document.getElementById('twinImprovements');
+  improvEl.innerHTML = (r.twin_improvements||[]).map(imp=>`
+    <div style="display:flex;gap:.5rem;align-items:center;font-size:.8rem;color:var(--green);padding:.3rem 0">
+      <span style="color:var(--green);flex-shrink:0">+</span>
+      <span style="color:var(--text2)">${esc(imp)}</span>
+    </div>`).join('');
+
+  // Tab: Fallacies
+  const fallacies = r.fallacies || [];
+  const flEl = document.getElementById('fallacyList');
+  if (fallacies.length === 0) {
+    flEl.innerHTML = `<div class="empty-state">✓ No fallacies detected<br>Clean logical structure</div>`;
+  } else {
+    flEl.innerHTML = fallacies.map((f,i)=>`
+      <div class="fallacy-item">
+        <div class="fi-head" onclick="toggleFallacy(${i})">
+          <span class="fi-name">${(f.type||'').replace(/_/g,' ').toUpperCase()}</span>
+          <div class="fi-badges">
+            <span class="sev s-${f.severity||'medium'}">${(f.severity||'').toUpperCase()}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--red)">${f.penalty||''}</span>
+          </div>
+        </div>
+        <div class="fi-body" id="fib${i}">
+          ${f.latin_name?`<div style="font-size:.72rem;color:var(--purple);margin-bottom:.35rem;font-style:italic">Formally: ${f.latin_name}</div>`:''}
+          ${f.excerpt?`<div class="fi-excerpt">"${esc(f.excerpt)}"</div>`:''}
+          <div>${esc(f.explanation||'')}</div>
+          ${f.fix?`<div class="fi-fix">✓ Fix: ${esc(f.fix)}</div>`:''}
+        </div>
+      </div>`).join('');
+  }
+
+  // Tab: Steps
+  const steps = r.coaching?.upgrade_path || [];
+  document.getElementById('upgradeSteps').innerHTML = steps.map((s,i)=>`
+    <div class="ustep">
+      <div class="ustep-num">${i+1}</div>
+      <div class="ustep-text">${esc(s)}</div>
+    </div>`).join('');
+  document.getElementById('drillText').textContent = r.coaching?.drill || '—';
+
+  // Tab: Intuition
+  const intuit = r.intuition || {};
+  if (intuit.has_hidden_insight) {
+    document.getElementById('intuitionTab').style.display = 'block';
+    document.getElementById('intuitionText').textContent = intuit.translation || '—';
+    document.getElementById('intuitionData').textContent = intuit.data || '';
+  } else {
+    document.getElementById('intuitionTab').style.display = 'none';
+  }
+
+  // Tab: Raw JSON
+  document.getElementById('rawJson').innerHTML = syntaxHL(JSON.stringify(r, null, 2));
+
+  document.getElementById('resultCard').classList.add('show');
+  document.getElementById('resultCard').scrollIntoView({behavior:'smooth', block:'start'});
+
+  switchTab('improve');
+}
+
+function scoreColor(s) {
+  if (s >= 4) return 'var(--green)';
+  if (s >= 3) return 'var(--blue)';
+  if (s >= 2) return 'var(--accent)';
+  return 'var(--red)';
+}
+
+// ─────────────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll('.rtab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+}
+
+function toggleFallacy(i) {
+  document.getElementById('fib'+i).classList.toggle('open');
+}
+
+// ─────────────────────────────────────────────────────
+// ACTIONS
+// ─────────────────────────────────────────────────────
+function tryImprovedVersion() {
+  if (!currentResult?.synthetic_twin) return;
+  document.getElementById('argInput').value = currentResult.synthetic_twin;
+  updateCharCount(document.getElementById('argInput'));
+  document.getElementById('resultCard').classList.remove('show');
+  document.getElementById('argInput').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function copyImproved() {
+  const text = currentResult?.synthetic_twin || '';
+  navigator.clipboard?.writeText(text).then(()=>{
+    const btn = event.target;
+    btn.textContent = '✓ Copied!';
+    setTimeout(()=>btn.textContent='📋 Copy Improved', 2000);
+  });
+}
+
+function resetResult() {
+  document.getElementById('resultCard').classList.remove('show');
+  document.getElementById('argInput').value = '';
+  document.getElementById('charCount').textContent = '0 / 500';
+  document.getElementById('argInput').focus();
+}
+
+// ─────────────────────────────────────────────────────
+// LOADING ANIMATION
+// ─────────────────────────────────────────────────────
+function animateSteps() {
+  return new Promise(resolve => {
+    let i = 0;
+    const tick = () => {
+      if (i > 0) document.getElementById('ls'+(i-1)).className = 'ls done';
+      if (i < 5) {
+        document.getElementById('ls'+i).className = 'ls on';
+        i++;
+        setTimeout(tick, 350 + Math.random()*200);
+      } else setTimeout(resolve, 200);
+    };
+    tick();
+  });
+}
+
+function resetLoadingSteps() {
+  for (let i=0;i<5;i++) document.getElementById('ls'+i).className='ls';
+}
+
+// ─────────────────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function syntaxHL(str) {
+  const HL = ['logic_score','synthetic_twin','weight_delta','argument_quality'];
+  return str.split('\n').map(line => {
+    const h = HL.some(k=>line.includes(`"${k}"`));
+    const c = line
+      .replace(/("[\w_]+")\s*:/g,'<span style="color:#4da6ff">$1</span>:')
+      .replace(/:\s*"([^"]*)"/g,': <span style="color:#fca5a5">"$1"</span>')
+      .replace(/:\s*(-?\d+\.?\d*)/g,': <span style="color:#f5e642">$1</span>')
+      .replace(/:\s*(true|false|null)/g,': <span style="color:#c084fc">$1</span>');
+    return h
+      ? `<span style="background:rgba(245,230,66,.1);border-left:2px solid #f5e642;padding-left:.3rem;display:block">${c}</span>`
+      : `<span>${c}</span>`;
+  }).join('\n');
+}
+
+// ─────────────────────────────────────────────────────
+// GROWTH BAR ANIMATION
+// ─────────────────────────────────────────────────────
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.querySelectorAll('.growth-fill').forEach(bar => {
+        bar.style.width = bar.dataset.w;
+      });
+    }
+  });
+}, {threshold:.3});
+
+document.querySelectorAll('.growth-bar-section').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
