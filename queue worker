@@ -1,0 +1,251 @@
+"""
+LogicScale Neural Engine v4.0
+queue_worker.py — Async job queue so the system never blocks under load.
+                  Uses a lightweight SQLite-based queue (no Redis needed
+                  for local/small scale). Drop-in upgrade path to Celery+Redis.
+
+Architecture:
+    Request → POST /analyze → Job inserted → Worker picks up → Result stored
+    Client polls GET /job/{id} until done.
+
+This means 100 simultaneous users don't block each other.
+"""
+
+import json
+import time
+import uuid
+import sqlite3
+import threading
+import traceback
+from datetime  import datetime, timezone
+from pathlib   import Path
+from typing    import Optional, Callable
+
+
+QUEUE_DB = Path(__file__).parent / "data" / "job_queue.db"
+
+JOB_STATUS = {
+    "PENDING":    "pending",
+    "PROCESSING": "processing",
+    "DONE":       "done",
+    "FAILED":     "failed",
+}
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS jobs (
+    job_id       TEXT PRIMARY KEY,
+    status       TEXT DEFAULT 'pending',
+    created_at   TEXT,
+    started_at   TEXT,
+    finished_at  TEXT,
+    priority     INTEGER DEFAULT 5,
+    input_json   TEXT,
+    result_json  TEXT,
+    error_msg    TEXT,
+    user_id      TEXT,
+    attempt      INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_status   ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_user     ON jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_priority ON jobs(priority, created_at);
+"""
+
+
+class JobQueue:
+    """SQLite-backed job queue. Thread-safe."""
+
+    def __init__(self, db_path: Path = QUEUE_DB):
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = str(db_path)
+        self._init()
+
+    def _conn(self):
+        conn = sqlite3.connect(self.path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")  # allow concurrent reads
+        return conn
+
+    def _init(self):
+        with self._conn() as conn:
+            conn.executescript(SCHEMA)
+
+    def enqueue(self, input_data: dict, user_id: str = "anonymous",
+                priority: int = 5) -> str:
+        """Add a job. Returns job_id."""
+        job_id = str(uuid.uuid4())
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO jobs(job_id,status,created_at,priority,input_json,user_id)
+                VALUES(?,?,?,?,?,?)
+            """, (
+                job_id, JOB_STATUS["PENDING"],
+                datetime.now(timezone.utc).isoformat(),
+                priority,
+                json.dumps(input_data),
+                user_id,
+            ))
+        return job_id
+
+    def dequeue(self) -> Optional[dict]:
+        """Claim the next pending job atomically."""
+        with self._conn() as conn:
+            row = conn.execute("""
+                SELECT * FROM jobs
+                WHERE status='pending' AND attempt < 3
+                ORDER BY priority ASC, created_at ASC
+                LIMIT 1
+            """).fetchone()
+            if not row:
+                return None
+            conn.execute("""
+                UPDATE jobs SET status='processing', started_at=?, attempt=attempt+1
+                WHERE job_id=?
+            """, (datetime.now(timezone.utc).isoformat(), row["job_id"]))
+        return dict(row)
+
+    def complete(self, job_id: str, result: dict):
+        with self._conn() as conn:
+            conn.execute("""
+                UPDATE jobs SET status='done', finished_at=?, result_json=?
+                WHERE job_id=?
+            """, (
+                datetime.now(timezone.utc).isoformat(),
+                json.dumps(result, default=str),
+                job_id,
+            ))
+
+    def fail(self, job_id: str, error: str):
+        with self._conn() as conn:
+            conn.execute("""
+                UPDATE jobs
+                SET status=CASE WHEN attempt >= 3 THEN 'failed' ELSE 'pending' END,
+                    error_msg=?
+                WHERE job_id=?
+            """, (error, job_id))
+
+    def get(self, job_id: str) -> Optional[dict]:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM jobs WHERE job_id=?", (job_id,)
+            ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        if d.get("result_json"):
+            try:
+                d["result"] = json.loads(d["result_json"])
+            except Exception:
+                pass
+        return d
+
+    def stats(self) -> dict:
+        with self._conn() as conn:
+            row = conn.execute("""
+                SELECT
+                    COUNT(*) FILTER(WHERE status='pending')    AS pending,
+                    COUNT(*) FILTER(WHERE status='processing') AS processing,
+                    COUNT(*) FILTER(WHERE status='done')       AS done,
+                    COUNT(*) FILTER(WHERE status='failed')     AS failed,
+                    AVG(CASE WHEN status='done'
+                        THEN (julianday(finished_at)-julianday(started_at))*86400
+                    END) AS avg_duration_sec
+                FROM jobs
+            """).fetchone()
+        return dict(row) if row else {}
+
+    def cleanup_old(self, days: int = 7):
+        """Remove completed jobs older than N days."""
+        with self._conn() as conn:
+            conn.execute("""
+                DELETE FROM jobs
+                WHERE status IN ('done','failed')
+                AND created_at < datetime('now', ?)
+            """, (f"-{days} days",))
+
+
+class Worker:
+    """
+    Background worker thread. Polls the queue and processes jobs.
+    Run multiple workers for parallelism.
+    """
+
+    def __init__(self, worker_id: int, queue: JobQueue,
+                 process_fn: Callable, poll_interval: float = 0.5):
+        self.worker_id    = worker_id
+        self.queue        = queue
+        self.process_fn   = process_fn
+        self.poll_interval = poll_interval
+        self._stop        = threading.Event()
+        self._thread      = threading.Thread(
+            target=self._run, daemon=True,
+            name=f"Worker-{worker_id}"
+        )
+
+    def start(self):
+        self._thread.start()
+        print(f"  [Worker-{self.worker_id}] Started")
+
+    def stop(self):
+        self._stop.set()
+
+    def _run(self):
+        while not self._stop.is_set():
+            job = self.queue.dequeue()
+            if not job:
+                time.sleep(self.poll_interval)
+                continue
+
+            job_id = job["job_id"]
+            print(f"  [Worker-{self.worker_id}] Processing {job_id[:8]}…")
+
+            try:
+                input_data = json.loads(job.get("input_json", "{}"))
+                result     = self.process_fn(input_data)
+                self.queue.complete(job_id, result)
+                print(f"  [Worker-{self.worker_id}] Done {job_id[:8]} "
+                      f"→ score={result.get('analysis',{}).get('logic_score','?')}")
+            except Exception as e:
+                err = traceback.format_exc()
+                self.queue.fail(job_id, str(e))
+                print(f"  [Worker-{self.worker_id}] Failed {job_id[:8]}: {e}")
+
+
+class WorkerPool:
+    """
+    Manages N worker threads. Drop-in for single-threaded Flask.
+    For production: replace with Celery workers.
+    """
+
+    def __init__(self, n_workers: int, queue: JobQueue, process_fn: Callable):
+        self.workers = [
+            Worker(i, queue, process_fn)
+            for i in range(n_workers)
+        ]
+        self.queue = queue
+
+    def start(self):
+        for w in self.workers:
+            w.start()
+        print(f"  WorkerPool: {len(self.workers)} workers online")
+
+    def stop(self):
+        for w in self.workers:
+            w.stop()
+
+    def submit(self, input_data: dict, user_id: str = "anon",
+               priority: int = 5) -> str:
+        return self.queue.enqueue(input_data, user_id, priority)
+
+    def get_result(self, job_id: str, timeout: float = 30.0) -> Optional[dict]:
+        """Poll until done or timeout."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            job = self.queue.get(job_id)
+            if not job:
+                return None
+            if job["status"] == "done":
+                return job.get("result")
+            if job["status"] == "failed":
+                raise RuntimeError(f"Job failed: {job.get('error_msg')}")
+            time.sleep(0.3)
+        raise TimeoutError(f"Job {job_id} did not complete in {timeout}s")
