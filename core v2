@@ -1,0 +1,521 @@
+"""
+LogicScale Neural Engine v4.0
+core_v2.py — Production-ready orchestrator.
+             Integrates: queue, cache, user profiles, world learning, analytics.
+
+Usage:
+    python core_v2.py server               # Start full API
+    python core_v2.py analyze "arg" --age 17 --user-id abc123
+    python core_v2.py world --source reddit --limit 100
+    python core_v2.py stats
+    python core_v2.py profile --user-id abc123
+"""
+
+import json
+import sys
+import os
+import argparse
+import threading
+from datetime import datetime, timezone
+from pathlib  import Path
+
+# ── Project imports ────────────────────────────────────────────────────────────
+BASE = Path(__file__).parent
+sys.path.insert(0, str(BASE))
+
+from analyzer      import LogicAnalyzer
+from database      import AnalysisDB
+from analytics     import Analytics
+from user_profile  import UserProfileDB, get_age_group
+from world_learner import WorldLearner
+from queue_worker  import JobQueue, WorkerPool
+from cache         import ArgumentCache
+
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+SETTINGS_PATH = BASE / "engine_settings.json"
+DB_PATH       = BASE / "data" / "simulation_results.db"
+PROFILE_DB    = BASE / "data" / "user_profiles.db"
+
+def load_settings() -> dict:
+    defaults = {
+        "engine_version":      "4.0.2-adversarial",
+        "anthropic_api_key":   os.environ.get("ANTHROPIC_API_KEY", ""),
+        "model":               "claude-sonnet-4-20250514",
+        "max_tokens":          2000,
+        "score_floor":         0.5,
+        "score_ceiling":       5.0,
+        "weight_delta_min":    0.01,
+        "weight_delta_max":    0.30,
+        "bias_shield_threshold": 0.65,
+        "precision_mode":      "strict",
+        "log_all_audits":      True,
+        "n_workers":           4,           # parallel analysis workers
+        "rate_limit_per_min":  10,          # per user
+        "cache_ttl_hours":     24,
+        "world_collect_nightly": True,
+    }
+    if SETTINGS_PATH.exists():
+        with open(SETTINGS_PATH) as f:
+            saved = json.load(f)
+            return {**defaults, **saved}
+    SETTINGS_PATH.write_text(json.dumps(defaults, indent=2))
+    return defaults
+
+
+# ── Process function (runs in worker threads) ──────────────────────────────────
+def make_process_fn(analyzer: LogicAnalyzer, audit_db: AnalysisDB,
+                    profile_db: UserProfileDB, cache: ArgumentCache):
+    def process(input_data: dict) -> dict:
+        arg     = input_data["argument"]
+        age     = int(input_data.get("age", 17))
+        skill   = input_data.get("skill", "intermediate")
+        session = int(input_data.get("session", 1))
+        region  = input_data.get("region", "unknown")
+        topic   = input_data.get("topic", "general")
+        user_id = input_data.get("user_id", "anonymous")
+
+        # 1. Cache check
+        cached = cache.get(arg, skill, age)
+        if cached:
+            cached["_from_cache"] = True
+            return cached
+
+        # 2. Run analysis
+        result = analyzer.audit(
+            argument=arg, age=age, skill=skill,
+            session=session, region=region, topic=topic,
+        )
+
+        # 3. Save to audit DB
+        audit_db.save(result)
+
+        # 4. Save to cache
+        cache.set(arg, skill, age, result)
+
+        # 5. Record in user profile
+        session_id = input_data.get("session_id", "single")
+        profile_db.record_argument(user_id, session_id, result, topic)
+
+        return result
+
+    return process
+
+
+# ── CLI ────────────────────────────────────────────────────────────────────────
+def cli():
+    parser = argparse.ArgumentParser(prog="logicscale_v2")
+    sub    = parser.add_subparsers(dest="command")
+
+    # analyze
+    p_an = sub.add_parser("analyze")
+    p_an.add_argument("argument")
+    p_an.add_argument("--age",     type=int, default=17)
+    p_an.add_argument("--skill",   default="intermediate",
+                      choices=["beginner","intermediate","advanced","expert"])
+    p_an.add_argument("--session", type=int, default=1)
+    p_an.add_argument("--region",  default="unknown")
+    p_an.add_argument("--topic",   default="general")
+    p_an.add_argument("--user-id", default="cli_user")
+    p_an.add_argument("--raw",     action="store_true")
+
+    # server
+    p_sv = sub.add_parser("server")
+    p_sv.add_argument("--port",  type=int, default=5000)
+    p_sv.add_argument("--host",  default="127.0.0.1")
+    p_sv.add_argument("--debug", action="store_true")
+
+    # world learning
+    p_wl = sub.add_parser("world")
+    p_wl.add_argument("--source",    choices=["reddit","bundestag","transcripts","all"])
+    p_wl.add_argument("--analyze",   action="store_true")
+    p_wl.add_argument("--summarize", action="store_true")
+    p_wl.add_argument("--limit",     type=int, default=100)
+
+    # profile
+    p_pr = sub.add_parser("profile")
+    p_pr.add_argument("--user-id", required=True)
+    p_pr.add_argument("--curriculum", action="store_true")
+
+    # stats
+    sub.add_parser("stats")
+
+    args     = parser.parse_args()
+    settings = load_settings()
+
+    if not settings.get("anthropic_api_key") and args.command not in ("stats",):
+        key = os.environ.get("ANTHROPIC_API_KEY","")
+        if key:
+            settings["anthropic_api_key"] = key
+        elif args.command not in ("stats","world"):
+            print("ERROR: No API key. Run python setup.py first.")
+            sys.exit(1)
+
+    # Init components
+    analyzer   = LogicAnalyzer(settings)
+    audit_db   = AnalysisDB(DB_PATH)
+    profile_db = UserProfileDB(PROFILE_DB)
+    cache      = ArgumentCache(ttl_hours=settings.get("cache_ttl_hours", 24))
+    process_fn = make_process_fn(analyzer, audit_db, profile_db, cache)
+
+    if args.command == "analyze":
+        _cmd_analyze(args, process_fn, profile_db, settings)
+    elif args.command == "server":
+        _cmd_server(args, settings, analyzer, audit_db, profile_db, cache, process_fn)
+    elif args.command == "world":
+        _cmd_world(args, settings, analyzer)
+    elif args.command == "profile":
+        _cmd_profile(args, profile_db, audit_db)
+    elif args.command == "stats":
+        _cmd_stats(audit_db, profile_db, cache)
+    else:
+        parser.print_help()
+
+
+# ── Command implementations ────────────────────────────────────────────────────
+def _cmd_analyze(args, process_fn, profile_db, settings):
+    try:
+        from rich.console import Console
+        from rich.panel   import Panel
+        from rich.table   import Table
+        console = Console()
+    except ImportError:
+        console = None
+
+    input_data = {
+        "argument": args.argument,
+        "age":      args.age,
+        "skill":    args.skill,
+        "session":  args.session,
+        "region":   args.region,
+        "topic":    args.topic,
+        "user_id":  getattr(args, "user_id", "cli_user"),
+    }
+
+    if console:
+        with console.status("[green]Running neural audit…[/green]"):
+            result = process_fn(input_data)
+    else:
+        result = process_fn(input_data)
+
+    if args.raw:
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    a = result.get("analysis", {})
+    score   = a.get("logic_score", 0)
+    quality = a.get("argument_quality","?")
+    cached  = result.get("_from_cache", False)
+
+    if console:
+        color = "green" if score >= 4 else "cyan" if score >= 3 else "yellow" if score >= 2 else "red"
+        console.print(Panel(
+            f"[bold {color}]{score:.2f}/5.00[/bold {color}]  [{color}]{quality.upper()}[/{color}]"
+            + ("  [dim](cached)[/dim]" if cached else ""),
+            title="[bold]LOGIC_SCORE[/bold]", border_style=color
+        ))
+
+        fallacies = a.get("fallacies", [])
+        if fallacies:
+            t = Table(title="Detected Fallacies", border_style="red")
+            t.add_column("Type", style="yellow")
+            t.add_column("Severity")
+            t.add_column("Confidence")
+            t.add_column("Penalty", style="red")
+            for f in fallacies:
+                t.add_row(
+                    f["type"].replace("_"," ").title(),
+                    f.get("severity","?").upper(),
+                    f"{f.get('confidence',0):.0%}",
+                    str(f.get("penalty_applied","")),
+                )
+            console.print(t)
+        else:
+            console.print("[green]✓ No fallacies detected[/green]")
+
+        wd = a.get("weight_delta_breakdown", {})
+        console.print(f"\n[bold]weight_delta:[/bold] [yellow]{a.get('weight_delta',0):.3f}[/yellow]"
+                      f" (surprise={wd.get('surprise_factor',0):.3f})")
+        console.print(Panel(
+            f"[italic cyan]{a.get('synthetic_twin','—')}[/italic cyan]",
+            title="[bold]SYNTHETIC TWIN[/bold]", border_style="cyan"
+        ))
+        console.print(Panel(result.get("engineering_note","—"),
+                            title="[bold]ENGINEERING NOTE[/bold]", border_style="blue"))
+
+        tip = result.get("coaching_output",{}).get("primary_tip","")
+        if tip:
+            console.print(f"\n[bold green]💡 Tip:[/bold green] {tip}")
+    else:
+        print(f"Score: {score:.2f}/5.0 | Quality: {quality}")
+        print(f"Note: {result.get('engineering_note','')}")
+
+
+def _cmd_server(args, settings, analyzer, audit_db, profile_db, cache, process_fn):
+    try:
+        from flask      import Flask, request, jsonify
+        from flask_cors import CORS
+    except ImportError:
+        print("Install: pip install flask flask-cors")
+        sys.exit(1)
+
+    queue      = JobQueue()
+    worker_pool = WorkerPool(
+        n_workers  = settings.get("n_workers", 4),
+        queue      = queue,
+        process_fn = process_fn,
+    )
+    worker_pool.start()
+
+    app = Flask(__name__)
+    CORS(app)
+
+    # ── Health ──
+    @app.route("/health")
+    def health():
+        return jsonify({
+            "status":  "online",
+            "engine":  "LogicScale v4.0",
+            "workers": settings.get("n_workers", 4),
+            "queue":   queue.stats(),
+            "cache":   cache.stats(),
+        })
+
+    # ── Async analyze ──
+    @app.route("/analyze", methods=["POST"])
+    def analyze():
+        data    = request.get_json()
+        user_id = data.get("user_id", request.remote_addr or "anon")
+
+        # Rate limit
+        rl  = settings.get("rate_limit_per_min", 10)
+        ok, remaining = cache.check_rate_limit(user_id, rl)
+        if not ok:
+            return jsonify({"error": "Rate limit exceeded. Try again in 1 minute."}), 429
+
+        if not data or "argument" not in data:
+            return jsonify({"error": "Missing 'argument'"}), 400
+
+        # High-priority for premium users (future feature)
+        priority = 1 if data.get("premium") else 5
+
+        job_id = queue.enqueue(data, user_id=user_id, priority=priority)
+        return jsonify({
+            "job_id":    job_id,
+            "status":    "pending",
+            "poll_url":  f"/job/{job_id}",
+            "rate_limit_remaining": remaining,
+        }), 202
+
+    # ── Sync analyze (waits for result, up to 30s) ──
+    @app.route("/analyze/sync", methods=["POST"])
+    def analyze_sync():
+        data    = request.get_json()
+        user_id = data.get("user_id", request.remote_addr or "anon")
+        ok, _   = cache.check_rate_limit(user_id, settings.get("rate_limit_per_min",10))
+        if not ok:
+            return jsonify({"error": "Rate limit exceeded"}), 429
+
+        job_id = queue.enqueue(data, user_id=user_id)
+        try:
+            result = worker_pool.get_result(job_id, timeout=30)
+            return jsonify(result)
+        except TimeoutError:
+            return jsonify({"error": "Analysis timed out", "job_id": job_id}), 504
+        except RuntimeError as e:
+            return jsonify({"error": str(e)}), 500
+
+    # ── Poll job ──
+    @app.route("/job/<job_id>")
+    def get_job(job_id):
+        job = queue.get(job_id)
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+        return jsonify(job)
+
+    # ── User profile ──
+    @app.route("/profile/<user_id>")
+    def get_profile(user_id):
+        profile = profile_db.get_or_create(user_id)
+        return jsonify(profile)
+
+    @app.route("/profile/<user_id>", methods=["POST"])
+    def update_profile(user_id):
+        data    = request.get_json()
+        profile = profile_db.get_or_create(user_id)
+        # Only allow updating demographic fields
+        allowed = ["age","age_group","gender","region","country","education",
+                   "job_sector","income_bracket","employment_type","display_name",
+                   "preferred_language"]
+        for field in allowed:
+            if field in data:
+                profile[field] = data[field]
+        if "age" in data:
+            profile["age_group"] = get_age_group(int(data["age"]))
+        profile_db.save(profile)
+        return jsonify({"ok": True, "profile": profile})
+
+    @app.route("/profile/<user_id>/session", methods=["POST"])
+    def end_session(user_id):
+        """Call after a debate session to update cognitive profile."""
+        data     = request.get_json()
+        results  = data.get("session_results", [])
+        topic    = data.get("topic", "general")
+        profile  = profile_db.update_after_session(user_id, results, topic)
+        insights = profile_db.personal_insights(user_id)
+        return jsonify({
+            "profile":  profile,
+            "insights": insights,
+            "rank":     profile.get("rank"),
+            "xp":       profile.get("xp"),
+        })
+
+    @app.route("/profile/<user_id>/curriculum")
+    def get_curriculum(user_id):
+        plan = profile_db.generate_curriculum(user_id)
+        return jsonify({"curriculum": plan})
+
+    @app.route("/profile/<user_id>/insights")
+    def get_insights(user_id):
+        insights   = profile_db.personal_insights(user_id)
+        percentile = profile_db.get_percentile(user_id, audit_db)
+        return jsonify({"insights": insights, "percentile": percentile})
+
+    # ── Analytics ──
+    @app.route("/stats")
+    def stats():
+        ana = Analytics(audit_db)
+        return jsonify(ana.full_report())
+
+    @app.route("/stats/region")
+    def stats_region():
+        return jsonify(Analytics(audit_db).by_region())
+
+    @app.route("/stats/age")
+    def stats_age():
+        return jsonify(Analytics(audit_db).by_age_group())
+
+    @app.route("/stats/fallacies")
+    def stats_fallacies():
+        return jsonify(Analytics(audit_db).fallacy_frequency())
+
+    @app.route("/stats/demographic")
+    def stats_demographic():
+        """Cross-tab: age × region × fallacy type."""
+        ana = Analytics(audit_db)
+        return jsonify({
+            "by_region":         ana.by_region(),
+            "by_age_group":      ana.by_age_group(),
+            "fallacy_by_region": audit_db.fallacy_by_region(),
+            "fallacy_by_age":    audit_db.fallacy_by_age(),
+            "top_per_region":    audit_db.top_fallacy_per_region(),
+        })
+
+    @app.route("/history")
+    def history():
+        limit = int(request.args.get("limit", 50))
+        return jsonify(audit_db.recent(limit))
+
+    @app.route("/queue/stats")
+    def queue_stats():
+        return jsonify(queue.stats())
+
+    print(f"\n⬡  LogicScale v4.0 API")
+    print(f"   http://{args.host}:{args.port}")
+    print(f"   Workers: {settings.get('n_workers',4)}")
+    print(f"   Rate limit: {settings.get('rate_limit_per_min',10)}/min/user")
+    print()
+    print(f"   POST /analyze        → async (returns job_id)")
+    print(f"   POST /analyze/sync   → sync (waits, max 30s)")
+    print(f"   GET  /job/<id>       → poll result")
+    print(f"   GET  /profile/<id>   → user profile")
+    print(f"   POST /profile/<id>/session → update after session")
+    print(f"   GET  /stats/demographic → full cross-tab")
+    print(f"   GET  /health\n")
+
+    app.run(host=args.host, port=args.port, debug=args.debug, threaded=True)
+
+
+def _cmd_world(args, settings, analyzer):
+    learner = WorldLearner(settings)
+    if args.source in ("reddit","all"):
+        learner.collect_reddit(args.limit)
+    if args.source in ("bundestag","all"):
+        learner.collect_bundestag()
+    if args.source in ("transcripts","all"):
+        learner.collect_transcripts(BASE / "transcripts")
+    if args.analyze:
+        learner.analyze_batch(analyzer, args.limit)
+    if args.summarize:
+        learner.update_global_weights()
+
+
+def _cmd_profile(args, profile_db, audit_db):
+    user_id  = args.user_id
+    profile  = profile_db.get_or_create(user_id)
+    insights = profile_db.personal_insights(user_id)
+
+    print(f"\n⬡  Profile: {profile['display_name']} ({user_id})")
+    print(f"   Rank: {profile['rank']}  XP: {profile['xp']}")
+    print(f"   Sessions: {profile['total_sessions']}  Arguments: {profile['total_arguments']}")
+    print(f"   Skill: {profile['skill_level']}  Age: {profile['age']}")
+
+    cog = profile.get("cognitive", {})
+    print(f"\n   Cognitive Fingerprint:")
+    print(f"   • Dominant fallacy:   {cog.get('dominant_fallacy','none')}")
+    print(f"   • Improvement rate:   {cog.get('improvement_velocity',0):+.4f}/session")
+    print(f"   • Argument style:     {cog.get('argument_style','unknown')}")
+    print(f"   • Consistency:        {cog.get('consistency_score',0):.2f}/1.0")
+    print(f"   • Pressure resist.:   {cog.get('pressure_resistance',0):.2f}/1.0")
+
+    if insights:
+        print(f"\n   Personal Insights:")
+        for i in insights:
+            print(f"   → {i}")
+
+    if args.curriculum:
+        plan = profile_db.generate_curriculum(user_id)
+        print(f"\n   30-Day Curriculum:")
+        for week in plan:
+            print(f"\n   Week {week['week']}: {week['focus']}")
+            print(f"   Goal: {week['goal']}")
+            for ex in week['exercises']:
+                print(f"   • {ex}")
+
+
+def _cmd_stats(audit_db, profile_db, cache):
+    try:
+        from rich.console import Console
+        from rich.table   import Table
+        console = Console()
+    except ImportError:
+        ana = Analytics(audit_db)
+        print(json.dumps(ana.full_report(), indent=2, default=str))
+        return
+
+    console = Console()
+    ana     = Analytics(audit_db)
+    report  = ana.full_report()
+    ov      = report.get("overview", {})
+
+    console.print("\n[bold green]⬡ LogicScale Analytics[/bold green]\n")
+    console.print(f"  Total audits:        [bold]{ov.get('total_audits',0)}[/bold]")
+    console.print(f"  Avg logic_score:     [yellow]{ov.get('avg_logic_score',0):.2f}[/yellow]/5.0")
+    console.print(f"  Top fallacy:         [red]{ov.get('top_fallacy','—')}[/red]")
+    console.print(f"  Unique regions:      [cyan]{ov.get('unique_regions',0)}[/cyan]")
+
+    cache_s = cache.stats()
+    console.print(f"  Cache hits:          [dim]{cache_s.get('total_hits',0)}[/dim]")
+
+    region_data = report.get("by_region",[])
+    if region_data:
+        t = Table(title="By Region", border_style="blue")
+        t.add_column("Region"); t.add_column("Audits"); t.add_column("Avg Score"); t.add_column("Top Fallacy")
+        for r in region_data[:10]:
+            t.add_row(r["region"], str(r["count"]),
+                      f"{r['avg_score']:.2f}", r.get("top_fallacy","—"))
+        console.print(t)
+
+
+if __name__ == "__main__":
+    cli()
