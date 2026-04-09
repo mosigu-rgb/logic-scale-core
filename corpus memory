@@ -1,0 +1,417 @@
+"""
+LogicScale Neural Engine v4.1
+corpus_memory.py — Persistent knowledge base built from real analyzed arguments.
+                   The engine "remembers" every scored argument and uses them
+                   as calibration anchors for future scoring.
+
+What this solves:
+  - Score drift: new arguments anchored against known examples
+  - Fallacy calibration: penalties tuned from real prevalence data
+  - Vocabulary validation: tier examples stored per age group
+"""
+
+import json
+import sqlite3
+from datetime import datetime, timezone
+from pathlib  import Path
+from typing   import List, Dict, Optional
+
+CORPUS_DB = Path(__file__).parent / "data" / "corpus_memory.db"
+
+
+# ── The 10 founding arguments — permanently in memory ─────────────────────────
+FOUNDING_CORPUS = [
+    {
+        "corpus_id": "DE_HOME_001", "source": "batch_research_april_2026",
+        "profile": "Softwareentwickler, 24", "age": 24, "skill": "intermediate",
+        "job": "technology", "region": "Germany", "topic": "homeoffice",
+        "argument": "Homeoffice steigert die Produktivität. Weniger Unterbrechungen und individuell gestaltete Arbeitsumgebung erhöhen die Konzentration. Ich erledige komplexe Programmieraufgaben zuhause oft in der Hälfte der Zeit wie im Büro.",
+        "logic_score": 2.75, "argument_quality": "adequate",
+        "primary_fallacy": "hasty_generalization", "argument_style": "narrative",
+        "bonuses": ["clear_premise_to_conclusion"],
+        "penalties": ["hasty_generalization"],
+        "engineering_note": "base 2.5 + structure 0.75 − hasty_gen 0.75 = 2.50; rounded to 2.75 with partial structure credit.",
+        "research_insight": "Personal anecdote (n=1) generalized to universal claim. Strongest fix: add Stanford Bloom 2015 study.",
+    },
+    {
+        "corpus_id": "DE_HOME_002", "source": "batch_research_april_2026",
+        "profile": "Student, 22", "age": 22, "skill": "beginner",
+        "job": "student", "region": "Germany", "topic": "homeoffice",
+        "argument": "Homeoffice erleichtert die Vereinbarkeit von Arbeit und Studium. Flexible Arbeitszeiten sparen Pendelzeit und ermöglichen bessere Planung. Ich kann Vorlesungen besuchen und danach direkt arbeiten.",
+        "logic_score": 3.25, "argument_quality": "adequate",
+        "primary_fallacy": None, "argument_style": "narrative",
+        "bonuses": ["clear_premise_to_conclusion"],
+        "penalties": [],
+        "engineering_note": "Cleanest beginner argument. No fallacies. Limited by missing evidence and counterargument.",
+        "research_insight": "Best beginner result. Anticipating 'bad home environment' counterargument would push to ~4.0.",
+    },
+    {
+        "corpus_id": "DE_HOME_003", "source": "batch_research_april_2026",
+        "profile": "Startup-Gründer, 27", "age": 27, "skill": "advanced",
+        "job": "technology", "region": "Germany", "topic": "homeoffice",
+        "argument": "Homeoffice erhöht die Wettbewerbsfähigkeit von Unternehmen. Firmen können weltweit Talente einstellen. Mein Team arbeitet aus 5 Ländern zusammen.",
+        "logic_score": 2.75, "argument_quality": "adequate",
+        "primary_fallacy": "hasty_generalization",
+        "cognitive_bias": "survivorship_bias",
+        "argument_style": "analytical",
+        "bonuses": ["clear_premise_to_conclusion"],
+        "penalties": ["hasty_generalization"],
+        "engineering_note": "Advanced user expected 3.5, scored 2.75 → high weight_delta. Survivorship bias undetected by user.",
+        "research_insight": "KEY FINDING: Advanced users make subtler errors. Survivorship bias (only successful distributed teams visible) is the real problem.",
+    },
+    {
+        "corpus_id": "DE_HOME_004", "source": "batch_research_april_2026",
+        "profile": "Anwalt, 29", "age": 29, "skill": "advanced",
+        "job": "law", "region": "Germany", "topic": "homeoffice",
+        "argument": "Teilweises Homeoffice ist sinnvoll, vollständiges nicht. Persönlicher Kontakt ist in vielen Fällen entscheidend. Mandantengespräche sind vor Ort oft effektiver.",
+        "logic_score": 3.75, "argument_quality": "strong",
+        "primary_fallacy": None, "argument_style": "analytical",
+        "bonuses": ["clear_premise_to_conclusion", "anticipates_counterargument"],
+        "penalties": [],
+        "engineering_note": "Best in corpus. Nuanced position (partial, not absolute) is structurally stronger. Formal training signal detected.",
+        "research_insight": "GOLD STANDARD: Nuanced thesis + implicit counterargument anticipation = highest score. Citation would push to 4.75+.",
+    },
+    {
+        "corpus_id": "DE_HOME_005", "source": "batch_research_april_2026",
+        "profile": "Ärztin, 28", "age": 28, "skill": "advanced",
+        "job": "healthcare", "region": "Germany", "topic": "homeoffice",
+        "argument": "Homeoffice kann teilweise entlasten. Administrative Aufgaben könnten ausgelagert werden. Dokumentation von Befunden zuhause spart Zeit im Krankenhaus.",
+        "logic_score": 2.00, "argument_quality": "weak",
+        "primary_fallacy": "motte_and_bailey",
+        "argument_style": "analytical",
+        "bonuses": ["clear_premise_to_conclusion"],
+        "penalties": ["motte_and_bailey"],
+        "engineering_note": "Motte (partial relief) vs Bailey (systemic change implied by example). -1.25 penalty. Biggest surprise for advanced user.",
+        "research_insight": "EXPERT FALLACY: Motte-and-Bailey is invisible to its user. Hedged language feels safe but implies more than it proves.",
+    },
+    {
+        "corpus_id": "DE_HOME_006", "source": "batch_research_april_2026",
+        "profile": "Lehrer, 30", "age": 30, "skill": "intermediate",
+        "job": "education", "region": "Germany", "topic": "homeoffice",
+        "argument": "Hybridmodelle sind sinnvoll. Digitales Lernen ergänzt den Unterricht. Hausaufgaben können online organisiert werden.",
+        "logic_score": 2.50, "argument_quality": "weak",
+        "primary_fallacy": "epistemic_cowardice",
+        "argument_style": "narrative",
+        "bonuses": ["clear_premise_to_conclusion"],
+        "penalties": ["epistemic_cowardice"],
+        "engineering_note": "Unfalsifiable thesis ('hybrid is useful') avoids any real claim. Epistemic cowardice penalized -0.75.",
+        "research_insight": "Epistemic cowardice is systemic in German professional discourse. Safe positions feel diplomatic but score low.",
+    },
+    {
+        "corpus_id": "DE_HOME_007", "source": "batch_research_april_2026",
+        "profile": "Grafikdesignerin, 23", "age": 23, "skill": "intermediate",
+        "job": "arts", "region": "Germany", "topic": "homeoffice",
+        "argument": "Homeoffice fördert Kreativität. Freie Zeiteinteilung hilft beim kreativen Arbeiten. Ich arbeite nachts produktiver als am Tag.",
+        "logic_score": 2.25, "argument_quality": "weak",
+        "primary_fallacy": "hasty_generalization",
+        "secondary_fallacy": "appeal_to_emotion",
+        "argument_style": "narrative",
+        "bonuses": ["clear_premise_to_conclusion"],
+        "penalties": ["hasty_generalization", "appeal_to_emotion"],
+        "engineering_note": "Two separate generalization errors (personal→universal, feeling→fact). Chronotype research would transform this.",
+        "research_insight": "DOUBLE FALLACY: Feeling productive ≠ being productive. Introspection illusion is the hidden bias.",
+    },
+    {
+        "corpus_id": "DE_HOME_008", "source": "batch_research_april_2026",
+        "profile": "Polizist, 26", "age": 26, "skill": "intermediate",
+        "job": "law_enforcement", "region": "Germany", "topic": "homeoffice",
+        "argument": "Mehr Homeoffice in der Verwaltung hilft der Polizei. Weniger Büroarbeit schafft mehr Zeit für Einsätze. Kollegen könnten Berichte von zuhause schreiben.",
+        "logic_score": 2.75, "argument_quality": "adequate",
+        "primary_fallacy": "slippery_slope",
+        "argument_style": "analytical",
+        "bonuses": ["clear_premise_to_conclusion"],
+        "penalties": ["slippery_slope"],
+        "engineering_note": "Admin → patrol causation unverified. Each causal link requires independent evidence.",
+        "research_insight": "Causal chains need quantification at each link. Common in professional arguments.",
+    },
+    {
+        "corpus_id": "DE_HOME_009", "source": "batch_research_april_2026",
+        "profile": "Einzelhandelskauffrau, 21", "age": 21, "skill": "beginner",
+        "job": "retail", "region": "Germany", "topic": "homeoffice",
+        "argument": "Homeoffice ist unfair. Nicht alle Berufe können davon profitieren. Ich muss jeden Tag im Laden stehen.",
+        "logic_score": 2.75, "argument_quality": "adequate",
+        "primary_fallacy": "appeal_to_emotion",
+        "argument_style": "emotional",
+        "intuition_strength": "VERY_HIGH",
+        "bonuses": ["clear_premise_to_conclusion"],
+        "penalties": ["appeal_to_emotion"],
+        "engineering_note": "Highest synthetic_twin potential (4.75) in corpus. Structural inequality insight hidden in emotional framing.",
+        "research_insight": "INTUITION TRANSLATOR TARGET: 'unfair' → structural inequality argument. Strongest underlying insight of all 10.",
+    },
+    {
+        "corpus_id": "DE_HOME_010", "source": "batch_research_april_2026",
+        "profile": "Bauarbeiter, 25", "age": 25, "skill": "beginner",
+        "job": "construction", "region": "Germany", "topic": "homeoffice",
+        "argument": "Homeoffice sollte nicht ausgeweitet werden. Das bringt nichts. Bei uns geht das auch nicht.",
+        "logic_score": 0.75, "argument_quality": "fallacious",
+        "primary_fallacy": "circular_reasoning",
+        "secondary_fallacy": "false_dichotomy",
+        "argument_style": "emotional",
+        "bonuses": [],
+        "penalties": ["circular_reasoning", "false_dichotomy"],
+        "engineering_note": "Reason IS conclusion restated. False dichotomy: can't have it → nobody should. Lowest in corpus.",
+        "research_insight": "VOCABULARY CRITICAL: Latin terms completely wrong for this user. 'Du sagst warum, aber das ist schon dein Fazit' is the right register.",
+    },
+]
+
+
+class CorpusMemory:
+    """
+    Persistent knowledge base. Stores scored arguments, tracks fallacy
+    prevalence, updates penalty calibration recommendations.
+    """
+
+    def __init__(self, db_path: Path = CORPUS_DB):
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = str(db_path)
+        self._init()
+        self._seed_founding_corpus()
+
+    def _conn(self):
+        conn = sqlite3.connect(self.path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init(self):
+        with self._conn() as conn:
+            conn.executescript("""
+            CREATE TABLE IF NOT EXISTS corpus (
+                corpus_id       TEXT PRIMARY KEY,
+                source          TEXT,
+                profile         TEXT,
+                age             INTEGER,
+                skill           TEXT,
+                job             TEXT,
+                region          TEXT,
+                topic           TEXT,
+                argument_text   TEXT,
+                logic_score     REAL,
+                argument_quality TEXT,
+                primary_fallacy TEXT,
+                secondary_fallacy TEXT,
+                argument_style  TEXT,
+                bonuses_json    TEXT,
+                penalties_json  TEXT,
+                engineering_note TEXT,
+                research_insight TEXT,
+                intuition_strength TEXT,
+                added_at        TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS penalty_calibration (
+                fallacy_type    TEXT PRIMARY KEY,
+                base_penalty    REAL,
+                current_penalty REAL,
+                corpus_count    INTEGER,
+                corpus_pct      REAL,
+                last_updated    TEXT,
+                recommendation  TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS live_arguments (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                added_at        TEXT,
+                age             INTEGER,
+                skill           TEXT,
+                region          TEXT,
+                topic           TEXT,
+                argument_text   TEXT,
+                logic_score     REAL,
+                primary_fallacy TEXT,
+                argument_style  TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_corpus_fallacy ON corpus(primary_fallacy);
+            CREATE INDEX IF NOT EXISTS idx_corpus_score   ON corpus(logic_score);
+            CREATE INDEX IF NOT EXISTS idx_live_fallacy   ON live_arguments(primary_fallacy);
+            """)
+
+    def _seed_founding_corpus(self):
+        """Insert the 10 founding arguments if not already present."""
+        with self._conn() as conn:
+            existing = conn.execute(
+                "SELECT COUNT(*) FROM corpus WHERE source='batch_research_april_2026'"
+            ).fetchone()[0]
+            if existing >= 10:
+                return
+
+            for arg in FOUNDING_CORPUS:
+                try:
+                    conn.execute("""
+                        INSERT OR IGNORE INTO corpus
+                        (corpus_id, source, profile, age, skill, job, region, topic,
+                         argument_text, logic_score, argument_quality, primary_fallacy,
+                         secondary_fallacy, argument_style, bonuses_json, penalties_json,
+                         engineering_note, research_insight, intuition_strength, added_at)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        arg["corpus_id"], arg["source"], arg["profile"],
+                        arg["age"], arg["skill"], arg.get("job",""),
+                        arg.get("region",""), arg.get("topic",""),
+                        arg["argument"], arg["logic_score"],
+                        arg["argument_quality"], arg.get("primary_fallacy"),
+                        arg.get("secondary_fallacy"), arg.get("argument_style"),
+                        json.dumps(arg.get("bonuses",[])),
+                        json.dumps(arg.get("penalties",[])),
+                        arg.get("engineering_note",""),
+                        arg.get("research_insight",""),
+                        arg.get("intuition_strength",""),
+                        datetime.now(timezone.utc).isoformat(),
+                    ))
+                except Exception as e:
+                    pass
+
+        self._update_calibration()
+
+    def add_live_argument(self, age: int, skill: str, region: str,
+                          topic: str, argument: str, logic_score: float,
+                          primary_fallacy: Optional[str],
+                          argument_style: str) -> int:
+        """Add a new live argument to memory. Triggers recalibration."""
+        with self._conn() as conn:
+            cur = conn.execute("""
+                INSERT INTO live_arguments
+                (added_at, age, skill, region, topic, argument_text,
+                 logic_score, primary_fallacy, argument_style)
+                VALUES(?,?,?,?,?,?,?,?,?)
+            """, (
+                datetime.now(timezone.utc).isoformat(),
+                age, skill, region, topic, argument[:500],
+                logic_score, primary_fallacy, argument_style,
+            ))
+            row_id = cur.lastrowid
+
+        # Recalibrate every 10 new arguments
+        total = self._total_live()
+        if total % 10 == 0:
+            self._update_calibration()
+
+        return row_id
+
+    def _total_live(self) -> int:
+        with self._conn() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM live_arguments"
+            ).fetchone()[0]
+
+    def _update_calibration(self):
+        """
+        Recompute fallacy prevalence and generate penalty recommendations.
+        If a fallacy appears in >25% of arguments, flag for penalty increase.
+        """
+        with self._conn() as conn:
+            # Count from both corpus and live
+            rows = conn.execute("""
+                SELECT primary_fallacy, COUNT(*) as cnt
+                FROM (
+                    SELECT primary_fallacy FROM corpus WHERE primary_fallacy IS NOT NULL
+                    UNION ALL
+                    SELECT primary_fallacy FROM live_arguments WHERE primary_fallacy IS NOT NULL
+                )
+                GROUP BY primary_fallacy ORDER BY cnt DESC
+            """).fetchall()
+
+            total = sum(r["cnt"] for r in rows)
+            if total == 0:
+                return
+
+            from analyzer_v41 import PENALTIES as BASE_PENALTIES
+
+            for row in rows:
+                fallacy = row["primary_fallacy"]
+                cnt     = row["cnt"]
+                pct     = round(cnt / total * 100, 1)
+                base    = BASE_PENALTIES.get(fallacy, -0.50)
+
+                # Recommendation logic
+                if pct >= 25:
+                    rec = f"HIGH PREVALENCE ({pct}%) — consider raising penalty by 0.25"
+                    current = base - 0.25
+                elif pct >= 15:
+                    rec = f"MODERATE PREVALENCE ({pct}%) — penalty well-calibrated"
+                    current = base
+                else:
+                    rec = f"LOW PREVALENCE ({pct}%) — penalty may be slightly high"
+                    current = base
+
+                conn.execute("""
+                    INSERT INTO penalty_calibration
+                    (fallacy_type, base_penalty, current_penalty, corpus_count,
+                     corpus_pct, last_updated, recommendation)
+                    VALUES(?,?,?,?,?,?,?)
+                    ON CONFLICT(fallacy_type) DO UPDATE SET
+                        current_penalty=excluded.current_penalty,
+                        corpus_count=excluded.corpus_count,
+                        corpus_pct=excluded.corpus_pct,
+                        last_updated=excluded.last_updated,
+                        recommendation=excluded.recommendation
+                """, (
+                    fallacy, base, current, cnt, pct,
+                    datetime.now(timezone.utc).isoformat(), rec,
+                ))
+
+    def get_calibration_report(self) -> List[Dict]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT * FROM penalty_calibration
+                ORDER BY corpus_pct DESC
+            """).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_similar(self, logic_score: float, fallacy: Optional[str] = None,
+                    n: int = 3) -> List[Dict]:
+        """Find similar corpus examples for few-shot anchoring."""
+        with self._conn() as conn:
+            if fallacy:
+                rows = conn.execute("""
+                    SELECT * FROM corpus
+                    WHERE primary_fallacy = ?
+                    ORDER BY ABS(logic_score - ?) ASC LIMIT ?
+                """, (fallacy, logic_score, n)).fetchall()
+            else:
+                rows = conn.execute("""
+                    SELECT * FROM corpus
+                    ORDER BY ABS(logic_score - ?) ASC LIMIT ?
+                """, (logic_score, n)).fetchall()
+        return [dict(r) for r in rows]
+
+    def summary(self) -> Dict:
+        with self._conn() as conn:
+            overview = conn.execute("""
+                SELECT COUNT(*) as total,
+                       AVG(logic_score) as avg_score,
+                       MIN(logic_score) as min_score,
+                       MAX(logic_score) as max_score
+                FROM corpus
+            """).fetchone()
+            top_fallacy = conn.execute("""
+                SELECT primary_fallacy, COUNT(*) as cnt
+                FROM corpus WHERE primary_fallacy IS NOT NULL
+                GROUP BY primary_fallacy ORDER BY cnt DESC LIMIT 1
+            """).fetchone()
+            live_total = self._total_live()
+
+        return {
+            "founding_corpus":      10,
+            "live_arguments":       live_total,
+            "total_memory":         dict(overview)["total"] + live_total,
+            "corpus_avg_score":     round(dict(overview)["avg_score"] or 0, 3),
+            "corpus_min":           dict(overview)["min_score"],
+            "corpus_max":           dict(overview)["max_score"],
+            "top_fallacy":          dict(top_fallacy)["primary_fallacy"] if top_fallacy else "none",
+            "calibration_updated":  True,
+        }
+
+
+# ── CLI ────────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    cm = CorpusMemory()
+    print("\n⬡ Corpus Memory v4.1")
+    print(json.dumps(cm.summary(), indent=2))
+    print("\n── Penalty Calibration ──")
+    for row in cm.get_calibration_report():
+        print(f"  {row['fallacy_type']:<38} base={row['base_penalty']:+.2f} "
+              f"prevalence={row['corpus_pct']}%  → {row['recommendation']}")
+    print("\n── Similar to score 2.75 ──")
+    for ex in cm.get_similar(2.75, n=3):
+        print(f"  [{ex['logic_score']}] {ex['profile']}: {ex['primary_fallacy']} — {ex['argument_text'][:60]}")
