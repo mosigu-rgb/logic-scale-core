@@ -1,0 +1,192 @@
+"""
+Batch analysis of 10 real arguments for LogicScale research report.
+"""
+import json
+import sys
+import os
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+ARGUMENTS = [
+    {
+        "id": 1, "profile": "Softwareentwickler, 24",
+        "age": 24, "skill": "intermediate", "region": "Germany",
+        "job": "technology", "topic": "homeoffice",
+        "argument": "These: Homeoffice steigert die Produktivität. Begründung: Weniger Unterbrechungen und individuell gestaltete Arbeitsumgebung erhöhen die Konzentration. Beispiel: Ich erledige komplexe Programmieraufgaben zuhause oft in der Hälfte der Zeit wie im Büro."
+    },
+    {
+        "id": 2, "profile": "Student, 22",
+        "age": 22, "skill": "beginner", "region": "Germany",
+        "job": "student", "topic": "homeoffice",
+        "argument": "These: Homeoffice erleichtert die Vereinbarkeit von Arbeit und Studium. Begründung: Flexible Arbeitszeiten sparen Pendelzeit und ermöglichen bessere Planung. Beispiel: Ich kann Vorlesungen besuchen und danach direkt arbeiten."
+    },
+    {
+        "id": 3, "profile": "Startup-Gründer, 27",
+        "age": 27, "skill": "advanced", "region": "Germany",
+        "job": "technology", "topic": "homeoffice",
+        "argument": "These: Homeoffice erhöht die Wettbewerbsfähigkeit von Unternehmen. Begründung: Firmen können weltweit Talente einstellen, ohne geografisch eingeschränkt zu sein, was den Talentpool massiv vergrößert. Beispiel: Mein Team arbeitet aus 5 Ländern zusammen und wir haben Top-Entwickler gefunden, die wir lokal nie hätten einstellen können."
+    },
+    {
+        "id": 4, "profile": "Anwalt, 29",
+        "age": 29, "skill": "advanced", "region": "Germany",
+        "job": "law", "topic": "homeoffice",
+        "argument": "These: Teilweises Homeoffice ist sinnvoll, vollständiges jedoch nicht. Begründung: Persönlicher Kontakt ist in vielen beruflichen Situationen entscheidend für Vertrauen und Effektivität. Beispiel: Mandantengespräche sind vor Ort oft deutlich effektiver, weil nonverbale Kommunikation eine zentrale Rolle spielt."
+    },
+    {
+        "id": 5, "profile": "Ärztin, 28",
+        "age": 28, "skill": "advanced", "region": "Germany",
+        "job": "healthcare", "topic": "homeoffice",
+        "argument": "These: Homeoffice kann das Gesundheitssystem teilweise entlasten. Begründung: Administrative Aufgaben wie Dokumentation könnten ausgelagert werden, was Kapazitäten im Krankenhaus freisetzt. Beispiel: Die Dokumentation von Befunden zuhause zu erledigen spart wertvolle Zeit direkt am Patienten."
+    },
+    {
+        "id": 6, "profile": "Lehrer, 30",
+        "age": 30, "skill": "intermediate", "region": "Germany",
+        "job": "education", "topic": "homeoffice",
+        "argument": "These: Hybridmodelle in der Bildung sind sinnvoll. Begründung: Digitales Lernen kann den Präsenzunterricht sinnvoll ergänzen ohne ihn zu ersetzen. Beispiel: Hausaufgaben und Projektarbeiten können online organisiert werden, was den Unterricht effizienter macht."
+    },
+    {
+        "id": 7, "profile": "Grafikdesignerin, 23",
+        "age": 23, "skill": "intermediate", "region": "Germany",
+        "job": "arts", "topic": "homeoffice",
+        "argument": "These: Homeoffice fördert die Kreativität. Begründung: Freie Zeiteinteilung und die Möglichkeit, zur persönlichen Hochphase zu arbeiten, helfen beim kreativen Prozess. Beispiel: Ich persönlich arbeite nachts produktiver als tagsüber und das Homeoffice ermöglicht mir das."
+    },
+    {
+        "id": 8, "profile": "Polizist, 26",
+        "age": 26, "skill": "intermediate", "region": "Germany",
+        "job": "military", "topic": "homeoffice",
+        "argument": "These: Mehr Homeoffice in der Verwaltung hilft der gesamten Polizei. Begründung: Wenn Verwaltungsaufgaben remote erledigt werden, haben Beamte mehr Zeit für aktive Einsätze. Beispiel: Kollegen könnten Berichte und Protokolle von zuhause schreiben und wären dadurch tagsüber mehr im Einsatz verfügbar."
+    },
+    {
+        "id": 9, "profile": "Einzelhandelskauffrau, 21",
+        "age": 21, "skill": "beginner", "region": "Germany",
+        "job": "other", "topic": "homeoffice",
+        "argument": "These: Homeoffice ist gesellschaftlich unfair. Begründung: Nicht alle Berufsgruppen können überhaupt von Homeoffice profitieren, was zu einer strukturellen Ungleichheit führt. Beispiel: Ich muss jeden Tag physisch im Laden stehen, während andere bequem von zuhause arbeiten und trotzdem gleich viel oder mehr verdienen."
+    },
+    {
+        "id": 10, "profile": "Bauarbeiter, 25",
+        "age": 25, "skill": "beginner", "region": "Germany",
+        "job": "engineering", "topic": "homeoffice",
+        "argument": "These: Homeoffice sollte nicht weiter ausgeweitet werden. Begründung: Das bringt nichts. Beispiel: Bei uns auf der Baustelle geht das sowieso nicht, also warum sollen andere das bekommen."
+    },
+]
+
+SYSTEM_PROMPT = """You are LogicScale Neural Engine v4.0 — core reasoning module of DebateCoach.
+
+SCORING FORMULA (0.0–5.0):
+base = 2.5
+BONUSES: empirical_evidence +1.0, clear_premise_to_conclusion +0.75, anticipates_counterargument +0.50, correct_analogy +0.25
+PENALTIES: circular_reasoning -1.0, ad_hominem -0.75, straw_man -1.0, false_dichotomy -0.75, appeal_to_emotion -0.50, hasty_generalization -0.50, slippery_slope -0.50, appeal_to_popularity -0.50, motte_and_bailey -1.25, kafka_trap -1.50, epistemic_cowardice -0.75, isolated_demand_for_rigor -0.90, overton_manipulation -1.0
+CLAMP final to [0.5, 5.0]
+
+WEIGHT_DELTA: surprise_factor = |expected - actual| / 5.0, clamp(surprise * recency * consistency, 0.01, 0.30)
+
+RESPOND WITH VALID JSON ONLY. No text before or after."""
+
+def build_prompt(arg_data: dict) -> str:
+    age = arg_data["age"]
+    skill = arg_data["skill"]
+    expected = {"beginner": 2.0, "intermediate": 2.8, "advanced": 3.5, "expert": 4.2}[skill]
+    vocab = "elementary" if age < 14 else "secondary" if age < 18 else "university"
+
+    return f"""ARGUMENT #{arg_data['id']} — {arg_data['profile']} — Topic: {arg_data['topic']}
+TEXT: "{arg_data['argument']}"
+USER: age={age}, skill={skill}, job={arg_data['job']}, region={arg_data['region']}
+EXPECTED_SCORE_FOR_SKILL: {expected}
+
+Return this exact JSON:
+{{
+  "id": {arg_data['id']},
+  "profile": "{arg_data['profile']}",
+  "logic_score": <float>,
+  "score_breakdown": {{
+    "base": 2.5,
+    "bonuses": [{{"name": "<n>", "delta": <float>, "applied": <bool>}}],
+    "penalties": [{{"name": "<fallacy>", "delta": <float>, "applied": <bool>}}],
+    "raw_sum": <float>,
+    "final": <float>
+  }},
+  "argument_quality": "<strong|adequate|weak|fallacious>",
+  "fallacies": [
+    {{
+      "type": "<snake_case>",
+      "latin_name": "<string or null>",
+      "severity": "<low|medium|high|critical>",
+      "confidence": <float>,
+      "penalty": <negative float>,
+      "excerpt": "<exact phrase>",
+      "explanation": "<clear explanation>",
+      "fix": "<how to improve>"
+    }}
+  ],
+  "cognitive_biases": [{{"type": "<bias>", "severity": "<mild|moderate|severe>", "note": "<explanation>"}}],
+  "argument_style": "<narrative|analytical|data_driven|emotional|socratic>",
+  "synthetic_twin": "<logically improved version of the argument>",
+  "twin_score": <float>,
+  "weight_delta": <float 0.01-0.30>,
+  "weight_delta_breakdown": {{
+    "surprise_factor": <float>,
+    "recency_factor": 1.0,
+    "consistency_factor": 1.0
+  }},
+  "engineering_note": "<1 technical sentence explaining the score>",
+  "coaching_tip": "<most important improvement for this person>"
+}}"""
+
+
+def call_claude(settings: dict, system: str, user: str) -> dict:
+    import anthropic
+    client = anthropic.Anthropic(api_key=settings["anthropic_api_key"])
+    response = client.messages.create(
+        model=settings.get("model", "claude-sonnet-4-20250514"),
+        max_tokens=1500,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+    raw = response.content[0].text.strip()
+    import re
+    raw = re.sub(r'^```(?:json)?\s*', '', raw)
+    raw = re.sub(r'\s*```$', '', raw)
+    return json.loads(raw)
+
+
+def run_batch(settings: dict) -> list:
+    results = []
+    for arg_data in ARGUMENTS:
+        print(f"  Analyzing #{arg_data['id']}: {arg_data['profile']}...", end=" ", flush=True)
+        try:
+            result = call_claude(settings, SYSTEM_PROMPT, build_prompt(arg_data))
+            results.append(result)
+            score = result.get("logic_score", 0)
+            quality = result.get("argument_quality", "?")
+            fallacy_count = len(result.get("fallacies", []))
+            print(f"score={score:.2f} | {quality} | {fallacy_count} fallacies")
+        except Exception as e:
+            print(f"ERROR: {e}")
+            results.append({"id": arg_data["id"], "error": str(e)})
+        import time; time.sleep(0.8)
+    return results
+
+
+if __name__ == "__main__":
+    settings_path = Path(__file__).parent / "engine_settings.json"
+    if not settings_path.exists():
+        print("ERROR: engine_settings.json not found. Run setup.py first.")
+        sys.exit(1)
+    with open(settings_path) as f:
+        settings = json.load(f)
+    if not settings.get("anthropic_api_key"):
+        settings["anthropic_api_key"] = os.environ.get("ANTHROPIC_API_KEY","")
+    if not settings.get("anthropic_api_key"):
+        print("ERROR: No API key found.")
+        sys.exit(1)
+
+    print("\n⬡ LogicScale Neural Engine v4.0 — Batch Analysis")
+    print("  10 arguments · Research Mode\n")
+    results = run_batch(settings)
+    out_path = Path(__file__).parent / "data" / "batch_results.json"
+    out_path.parent.mkdir(exist_ok=True)
+    with open(out_path, "w") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+    print(f"\n  Results saved → {out_path}")
+    print(f"  Successful: {sum(1 for r in results if 'logic_score' in r)}/10")
