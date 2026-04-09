@@ -1,0 +1,496 @@
+"""
+LogicScale Neural Engine v4.0
+world_learner.py — The global learning module.
+                   Collects arguments from public sources (Reddit, Bundestag,
+                   debate transcripts) and updates global_weights.json
+                   so ALL users benefit from real-world patterns.
+
+Sources:
+  - Reddit r/ChangeMyView (labeled: delta = "this convinced me")
+  - Bundestag Open Data API (parliamentary debates)
+  - X/Twitter via API v2 (trending debate topics)
+  - Custom debate transcript folder (manual upload)
+
+Run nightly:
+    python world_learner.py --source reddit --limit 200
+    python world_learner.py --source bundestag --date 2026-04-01
+    python world_learner.py --summarize   (update global_weights.json)
+"""
+
+import json
+import time
+import hashlib
+import sqlite3
+import argparse
+import re
+from datetime  import datetime, timezone, timedelta
+from pathlib   import Path
+from typing    import Dict, List, Optional
+
+WEIGHTS_PATH = Path(__file__).parent / "data" / "global_weights.json"
+WORLD_DB     = Path(__file__).parent / "data" / "world_knowledge.db"
+
+# ── Default global weights (updated by learning) ──────────────────────────────
+DEFAULT_WEIGHTS = {
+    "version":    "4.0.2",
+    "updated_at": "",
+    "total_world_arguments_analyzed": 0,
+
+    # Fallacy base penalties — adjusted by world learning
+    "fallacy_penalties": {
+        "circular_reasoning":           -1.00,
+        "ad_hominem":                   -0.75,
+        "straw_man":                    -1.00,
+        "false_dichotomy":              -0.75,
+        "appeal_to_emotion":            -0.50,
+        "hasty_generalization":         -0.50,
+        "slippery_slope":               -0.50,
+        "appeal_to_popularity":         -0.50,
+        "motte_and_bailey":             -1.25,
+        "overton_manipulation":         -1.00,
+        "epistemic_cowardice":          -0.75,
+        "isolated_demand_for_rigor":    -0.90,
+        "kafka_trap":                   -1.50,
+    },
+
+    # Bonus weights — adjusted by world learning
+    "bonus_weights": {
+        "empirical_evidence":           1.00,
+        "clear_premise_to_conclusion":  0.75,
+        "anticipates_counterargument":  0.50,
+        "correct_analogy":              0.25,
+    },
+
+    # World statistics (from real arguments)
+    "world_stats": {
+        "avg_logic_score_global":       0.0,
+        "most_common_fallacy_global":   "appeal_to_emotion",
+        "topic_difficulty": {},        # topic → avg score
+        "fallacy_by_topic": {},        # topic → {fallacy: count}
+        "quality_by_source": {},       # reddit/bundestag/twitter → avg
+    },
+}
+
+
+class WorldDB:
+    """Stores all collected world arguments."""
+
+    def __init__(self, path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = str(path)
+        self._init()
+
+    def _conn(self):
+        conn = sqlite3.connect(self.path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init(self):
+        with self._conn() as conn:
+            conn.executescript("""
+            CREATE TABLE IF NOT EXISTS world_arguments (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                source        TEXT,        -- reddit / bundestag / twitter / transcript
+                source_id     TEXT UNIQUE, -- original post/debate ID
+                collected_at  TEXT,
+                topic         TEXT,
+                text          TEXT,
+                author_meta   TEXT,        -- JSON: age_hint, region, verified
+                quality_label TEXT,        -- gold/silver/bronze/weak (if known)
+                was_convincing INTEGER DEFAULT 0,  -- 1 if delta awarded (Reddit)
+                logic_score   REAL,        -- filled after analysis
+                fallacies     TEXT,        -- JSON array
+                analyzed      INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS world_insights (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                computed_at TEXT,
+                insight_type TEXT,
+                insight_json TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_wa_source  ON world_arguments(source);
+            CREATE INDEX IF NOT EXISTS idx_wa_topic   ON world_arguments(topic);
+            CREATE INDEX IF NOT EXISTS idx_wa_score   ON world_arguments(logic_score);
+            """)
+
+    def insert(self, source: str, source_id: str, topic: str,
+               text: str, author_meta: dict = None,
+               quality_label: str = None,
+               was_convincing: bool = False) -> bool:
+        """Returns True if new, False if duplicate."""
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    INSERT INTO world_arguments
+                    (source,source_id,collected_at,topic,text,author_meta,
+                     quality_label,was_convincing)
+                    VALUES(?,?,?,?,?,?,?,?)
+                """, (
+                    source, source_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    topic, text,
+                    json.dumps(author_meta or {}),
+                    quality_label,
+                    1 if was_convincing else 0,
+                ))
+            return True
+        except sqlite3.IntegrityError:
+            return False  # duplicate
+
+    def unanalyzed(self, limit: int = 100) -> list:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT * FROM world_arguments
+                WHERE analyzed=0 AND length(text) > 30
+                LIMIT ?
+            """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_analyzed(self, row_id: int, score: float, fallacies: list):
+        with self._conn() as conn:
+            conn.execute("""
+                UPDATE world_arguments
+                SET analyzed=1, logic_score=?, fallacies=?
+                WHERE id=?
+            """, (score, json.dumps(fallacies), row_id))
+
+    def compute_stats(self) -> dict:
+        with self._conn() as conn:
+            overview = conn.execute("""
+                SELECT COUNT(*) as total,
+                       AVG(logic_score) as avg_score
+                FROM world_arguments WHERE analyzed=1
+            """).fetchone()
+
+            by_topic = conn.execute("""
+                SELECT topic, AVG(logic_score) as avg_score, COUNT(*) as cnt
+                FROM world_arguments WHERE analyzed=1 AND topic IS NOT NULL
+                GROUP BY topic ORDER BY cnt DESC LIMIT 20
+            """).fetchall()
+
+            by_source = conn.execute("""
+                SELECT source, AVG(logic_score) as avg_score, COUNT(*) as cnt
+                FROM world_arguments WHERE analyzed=1
+                GROUP BY source
+            """).fetchall()
+
+        return {
+            "total_analyzed":  dict(overview)["total"] if overview else 0,
+            "avg_score":       round(dict(overview)["avg_score"] or 0, 3) if overview else 0,
+            "by_topic":        [dict(r) for r in by_topic],
+            "by_source":       [dict(r) for r in by_source],
+        }
+
+
+class WorldLearner:
+    """
+    Collects arguments from public sources and feeds them
+    into the global weight update pipeline.
+    """
+
+    def __init__(self, settings: dict):
+        self.settings = settings
+        self.db = WorldDB(WORLD_DB)
+
+    # ── Reddit r/ChangeMyView ──────────────────────────────────────────────────
+    def collect_reddit(self, limit: int = 100) -> int:
+        """
+        Collect from Reddit r/ChangeMyView.
+        Delta-awarded comments = convincing arguments (positive label).
+        Requires: pip install praw
+        Set in engine_settings.json: reddit_client_id, reddit_client_secret
+        """
+        try:
+            import praw
+        except ImportError:
+            print("  Install: pip install praw")
+            print("  And add to engine_settings.json:")
+            print('  "reddit_client_id": "...",')
+            print('  "reddit_client_secret": "...",')
+            print('  "reddit_user_agent": "LogicScale/4.0"')
+            return 0
+
+        reddit = praw.Reddit(
+            client_id     = self.settings.get("reddit_client_id", ""),
+            client_secret = self.settings.get("reddit_client_secret", ""),
+            user_agent    = self.settings.get("reddit_user_agent", "LogicScale/4.0"),
+        )
+
+        collected = 0
+        subreddit = reddit.subreddit("changemyview")
+
+        for post in subreddit.hot(limit=50):
+            topic = self._extract_topic(post.title)
+            post.comments.replace_more(limit=0)
+
+            for comment in post.comments.list()[:20]:
+                if not comment.body or len(comment.body) < 40:
+                    continue
+
+                # Check if delta was awarded (convincing argument)
+                was_convincing = any(
+                    "Δ" in r.body or "delta" in r.body.lower()
+                    for r in comment.replies.list()[:5]
+                    if hasattr(r, "body")
+                )
+
+                new = self.db.insert(
+                    source       = "reddit_cmv",
+                    source_id    = f"reddit_{comment.id}",
+                    topic        = topic,
+                    text         = comment.body[:500],
+                    author_meta  = {"upvotes": comment.score},
+                    quality_label = "gold" if was_convincing else None,
+                    was_convincing = was_convincing,
+                )
+                if new:
+                    collected += 1
+                    if collected >= limit:
+                        break
+            if collected >= limit:
+                break
+
+        print(f"  Reddit: collected {collected} new arguments")
+        return collected
+
+    # ── Bundestag Open Data ────────────────────────────────────────────────────
+    def collect_bundestag(self, date: str = None, limit: int = 200) -> int:
+        """
+        Bundestag Open Data API — parlamentarische Debatten.
+        No API key needed — fully public.
+        https://dip.bundestag.de/
+        """
+        try:
+            import urllib.request
+            import urllib.parse
+        except ImportError:
+            return 0
+
+        if not date:
+            date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+        base_url = "https://search.dip.bundestag.de/api/v1/plenarprotokoll"
+        params = urllib.parse.urlencode({
+            "f.datum.start": date,
+            "format": "json",
+            "rows": 10,
+        })
+
+        collected = 0
+        try:
+            req = urllib.request.Request(
+                f"{base_url}?{params}",
+                headers={"User-Agent": "LogicScale-Research/4.0"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read())
+
+            for doc in data.get("documents", []):
+                text = doc.get("text", "") or doc.get("titel", "")
+                if not text or len(text) < 50:
+                    continue
+                # Split into speech segments (~paragraph per speaker)
+                segments = [s.strip() for s in text.split("\n\n") if len(s.strip()) > 60]
+                for i, segment in enumerate(segments[:10]):
+                    new = self.db.insert(
+                        source      = "bundestag",
+                        source_id   = f"bt_{doc.get('id','')}_{i}",
+                        topic       = self._extract_topic(doc.get("titel","")),
+                        text        = segment[:500],
+                        author_meta = {"house": "Bundestag", "date": date},
+                        quality_label = "silver",  # Parliamentary = above average
+                    )
+                    if new:
+                        collected += 1
+        except Exception as e:
+            print(f"  Bundestag API error: {e}")
+            print("  (This is OK — data will be collected when internet is available)")
+
+        print(f"  Bundestag: collected {collected} new debate segments")
+        return collected
+
+    # ── Local transcript folder ────────────────────────────────────────────────
+    def collect_transcripts(self, folder: Path) -> int:
+        """
+        Load .txt debate transcripts from a local folder.
+        Format: Each paragraph = one argument segment.
+        Filename hint for topic: 'climate_debate_2026.txt'
+        """
+        collected = 0
+        for txt_file in folder.glob("*.txt"):
+            topic = txt_file.stem.replace("_", " ").replace("-", " ")
+            content = txt_file.read_text(encoding="utf-8", errors="ignore")
+            segments = [s.strip() for s in content.split("\n\n") if len(s.strip()) > 60]
+
+            for i, segment in enumerate(segments):
+                source_id = hashlib.md5(f"{txt_file.name}_{i}".encode()).hexdigest()
+                new = self.db.insert(
+                    source      = "transcript",
+                    source_id   = source_id,
+                    topic       = topic,
+                    text        = segment[:500],
+                    quality_label = "silver",
+                )
+                if new:
+                    collected += 1
+
+        print(f"  Transcripts: collected {collected} new segments from {folder}")
+        return collected
+
+    # ── Batch analyze unanalyzed world arguments ───────────────────────────────
+    def analyze_batch(self, analyzer, batch_size: int = 50) -> int:
+        """
+        Run LogicAnalyzer on unanalyzed world arguments.
+        Uses cheaper/faster settings for batch processing.
+        """
+        unanalyzed = self.db.unanalyzed(batch_size)
+        if not unanalyzed:
+            print("  No unanalyzed arguments found.")
+            return 0
+
+        analyzed = 0
+        for row in unanalyzed:
+            try:
+                result = analyzer.audit(
+                    argument = row["text"],
+                    age      = 22,           # neutral adult profile
+                    skill    = "intermediate",
+                    session  = 1,
+                    region   = "world",
+                    topic    = row.get("topic", "general"),
+                )
+                a = result.get("analysis", {})
+                self.db.mark_analyzed(
+                    row_id   = row["id"],
+                    score    = a.get("logic_score", 0),
+                    fallacies = a.get("fallacies", []),
+                )
+                analyzed += 1
+                time.sleep(0.5)  # Rate limit buffer
+            except Exception as e:
+                print(f"  Analysis error for row {row['id']}: {e}")
+
+        print(f"  Analyzed {analyzed} world arguments")
+        return analyzed
+
+    # ── Update global weights ──────────────────────────────────────────────────
+    def update_global_weights(self) -> dict:
+        """
+        Recompute global_weights.json from all world + user data.
+        Called after every batch analysis run.
+        """
+        weights = self._load_weights()
+        stats   = self.db.compute_stats()
+
+        # Update world stats
+        ws = weights["world_stats"]
+        ws["avg_logic_score_global"] = stats.get("avg_score", 0)
+        ws["topic_difficulty"] = {
+            r["topic"]: round(r["avg_score"], 3)
+            for r in stats.get("by_topic", [])
+        }
+        ws["quality_by_source"] = {
+            r["source"]: {"avg_score": round(r["avg_score"], 3), "count": r["cnt"]}
+            for r in stats.get("by_source", [])
+        }
+
+        weights["total_world_arguments_analyzed"] = stats.get("total_analyzed", 0)
+        weights["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        # Adjust fallacy penalties based on world prevalence
+        # (More common in bad arguments → higher penalty)
+        self._adjust_penalties(weights)
+
+        WEIGHTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        WEIGHTS_PATH.write_text(json.dumps(weights, indent=2))
+        print(f"  Global weights updated → {WEIGHTS_PATH}")
+        print(f"  Total world arguments: {weights['total_world_arguments_analyzed']}")
+        return weights
+
+    def _adjust_penalties(self, weights: dict):
+        """
+        Slightly adjust penalties based on empirical fallacy frequency.
+        More frequent in low-scoring arguments → increase penalty weight.
+        """
+        with self.db._conn() as conn:
+            rows = conn.execute("""
+                SELECT f.value as fallacy_type, COUNT(*) as cnt,
+                       AVG(wa.logic_score) as avg_score_when_present
+                FROM world_arguments wa,
+                     json_each(wa.fallacies) f
+                WHERE wa.analyzed=1
+                GROUP BY f.value
+                HAVING cnt > 5
+            """).fetchall()
+
+        for row in rows:
+            ft  = row["fallacy_type"]
+            avg = row["avg_score_when_present"]
+            if ft in weights["fallacy_penalties"] and avg is not None:
+                # Lower avg score when fallacy present → heavier penalty
+                base = weights["fallacy_penalties"][ft]
+                adjustment = max(-0.20, min(0.10, (avg - 2.5) * 0.05))
+                weights["fallacy_penalties"][ft] = round(base + adjustment, 3)
+
+    @staticmethod
+    def _load_weights() -> dict:
+        if WEIGHTS_PATH.exists():
+            with open(WEIGHTS_PATH) as f:
+                return {**DEFAULT_WEIGHTS, **json.load(f)}
+        return DEFAULT_WEIGHTS.copy()
+
+    @staticmethod
+    def _extract_topic(text: str) -> str:
+        """Simple topic extraction from title/headline."""
+        TOPICS = {
+            "climate": ["climate", "emissions", "co2", "carbon", "global warming"],
+            "ai":      ["ai", "artificial intelligence", "machine learning", "chatgpt"],
+            "politics":["election", "vote", "government", "democracy", "parliament"],
+            "economy": ["economy", "gdp", "inflation", "tax", "budget"],
+            "health":  ["health", "vaccine", "medicine", "mental health"],
+            "education":["education", "school", "university", "student"],
+            "technology":["tech", "internet", "social media", "data"],
+            "migration":["migration", "immigration", "refugee", "border"],
+        }
+        text_lower = text.lower()
+        for topic, keywords in TOPICS.items():
+            if any(kw in text_lower for kw in keywords):
+                return topic
+        return "general"
+
+
+# ── CLI ────────────────────────────────────────────────────────────────────────
+def cli():
+    parser = argparse.ArgumentParser(description="LogicScale World Learner")
+    parser.add_argument("--source",    choices=["reddit","bundestag","transcripts","all"])
+    parser.add_argument("--analyze",   action="store_true", help="Analyze collected args")
+    parser.add_argument("--summarize", action="store_true", help="Update global_weights.json")
+    parser.add_argument("--limit",     type=int, default=100)
+    parser.add_argument("--date",      type=str, default=None)
+    parser.add_argument("--folder",    type=str, default="transcripts")
+    args = parser.parse_args()
+
+    # Load settings
+    settings_path = Path(__file__).parent / "engine_settings.json"
+    settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+
+    learner = WorldLearner(settings)
+
+    if args.source in ("reddit", "all"):
+        learner.collect_reddit(args.limit)
+    if args.source in ("bundestag", "all"):
+        learner.collect_bundestag(args.date, args.limit)
+    if args.source in ("transcripts", "all"):
+        learner.collect_transcripts(Path(args.folder))
+
+    if args.analyze:
+        from analyzer import LogicAnalyzer
+        analyzer = LogicAnalyzer(settings)
+        learner.analyze_batch(analyzer, args.limit)
+
+    if args.summarize:
+        learner.update_global_weights()
+
+
+if __name__ == "__main__":
+    cli()
