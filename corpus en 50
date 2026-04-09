@@ -1,0 +1,614 @@
+"""
+LogicScale v4.2 — 50 English Argument Batch
+Topics: Climate Change, Remote Education, Cryptocurrency, AI Ethics, UBI
+"""
+import json
+from pathlib import Path
+
+def score(bonuses=[], penalties=[]):
+    raw = 2.5 + sum(bonuses) + sum(penalties)
+    return round(max(0.5, min(5.0, raw)), 2)
+
+# Bonus/penalty weights v4.2
+B_STRUCT  = 0.75   # clear structure
+B_EVID    = 1.00   # empirical evidence
+B_COUNTER = 0.50   # anticipates counterargument
+B_NUANCE  = 0.40   # nuanced position
+B_INSIDER = 0.35   # insider professional observation
+
+P_HASTY   = -0.85  # hasty generalization (raised v4.2)
+P_EMOTION_S = -0.30 # appeal to emotion soft (intuition detected)
+P_EMOTION_H = -0.65 # appeal to emotion hard
+P_CIRCUL  = -1.00  # circular reasoning
+P_STRAW   = -1.00  # straw man
+P_DICHOT  = -0.75  # false dichotomy
+P_EPI     = -0.75  # epistemic cowardice
+P_SLOPE   = -0.50  # slippery slope
+P_POPUL   = -0.50  # appeal to popularity
+P_MOTTE   = -1.25  # motte and bailey
+P_SURVIV  = -0.80  # survivorship bias
+P_SCOPE   = -0.65  # scope creep
+P_ANEC    = -0.40  # anecdote only
+P_VAGUE   = -0.35  # vague quantifier
+
+CORPUS_EN = [
+
+# ══════════════════════════════════════
+# CLIMATE CHANGE (1–10)
+# ══════════════════════════════════════
+
+{"id":1,"topic":"climate","age":22,"role":"Student","lang":"en",
+ "argument":"Governments should act more aggressively on climate change. Current measures are too slow. Emissions are still rising globally.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_VAGUE],
+ "fallacies":["hasty_generalization","vague_quantifier"],
+ "style":"emotional","intuition":False,
+ "score":score([B_STRUCT],[P_HASTY,P_VAGUE]),
+ "quality":"weak",
+ "coaching":"'Emissions still rising' is correct but needs scale. Add: 'Global CO₂ hit 36.8 Gt in 2023 (IEA) — a new record despite all current policies. At this rate, 1.5°C is breached before 2035 (IPCC AR6).' Then specify WHICH measures — carbon tax? renewables mandate? Without that, 'more aggressive' is empty.",
+ "tip":"Name the specific policy you want. 'More action' is not an argument.",
+ "upgrade_path":["1. State the specific policy: e.g. 'A global carbon tax of $100/tonne by 2030'",
+                 "2. Add IEA 2023 emissions data to show current measures are failing",
+                 "3. Anticipate the cost objection and address it"]},
+
+{"id":2,"topic":"climate","age":28,"role":"Oil Industry Worker","lang":"en",
+ "argument":"Climate policies are hurting regular workers. Jobs in traditional industries are being cut. Many colleagues lost their positions recently.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_SCOPE],
+ "fallacies":["hasty_generalization","scope_creep"],
+ "style":"emotional","intuition":True,
+ "intuition_concept":"just_transition_failure",
+ "score":score([B_STRUCT],[P_HASTY,P_SCOPE]),
+ "quality":"weak",
+ "coaching":"⭐ INTUITION: You're describing a real policy failure called the 'Just Transition problem.' Formal version: 'Climate policy without targeted retraining programs systematically harms workers in fossil fuel industries (avg. 45-55 years old, limited transferable skills). Germany's coal phase-out cost €40bn in transition support — without equivalent programs, displacement is not policy, it's abandonment.' Your colleagues' situation is a systemic failure, not a climate argument.",
+ "tip":"'My colleagues lost jobs' → 'Just Transition programs are underfunded — here's the data.'"},
+
+{"id":3,"topic":"climate","age":25,"role":"Activist","lang":"en",
+ "argument":"Strong regulations are necessary now. Delaying action will make things worse. Extreme weather events are increasing.",
+ "bonuses":[B_STRUCT,B_EVID],"penalties":[P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID],[P_HASTY]),
+ "quality":"adequate",
+ "coaching":"Solid foundation. 'Extreme weather increasing' is empirically supported. Strengthen: 'Economic losses from climate disasters have tripled since the 1980s to $280bn/year (Munich Re 2023). Each degree of warming increases extreme precipitation events by 7% (Clausius-Clapeyron relation).' Then specify what 'strong regulations' means — that's the gap.",
+ "tip":"Good evidence base. Now name the specific regulation. Vague 'strong action' loses debates."},
+
+{"id":4,"topic":"climate","age":30,"role":"Business Owner","lang":"en",
+ "argument":"Too many regulations hurt economic growth. Companies face higher costs. Energy prices have increased significantly.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_DICHOT],
+ "fallacies":["hasty_generalization","false_dichotomy"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT],[P_HASTY,P_DICHOT]),
+ "quality":"weak",
+ "coaching":"False dichotomy: regulations vs. growth is not binary. Germany's renewable energy sector employs 300,000 people — that IS economic growth. Counter: 'Carbon pricing creates market incentives for efficiency, reducing long-term energy costs (McKinsey: $1 invested in energy efficiency returns $3-4). Short-term cost increase vs. long-term competitiveness — the timeline is the real argument.'",
+ "tip":"Regulation vs. growth is a false dichotomy. Green industries create jobs too — address that."},
+
+{"id":5,"topic":"climate","age":21,"role":"Student","lang":"en",
+ "argument":"Individuals should also take responsibility. Governments alone cannot fix everything. People still consume excessively.",
+ "bonuses":[B_STRUCT,B_COUNTER],"penalties":[P_SCOPE],
+ "fallacies":["scope_creep"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_COUNTER],[P_SCOPE]),
+ "quality":"adequate",
+ "coaching":"Correctly anticipates the 'government should do everything' counterargument. But scope creep: individual action ≠ structural change. Strengthen: 'Individual carbon footprint accounts for ~8% of total emissions in developed countries (Project Drawdown). Systemic change (energy grid, transport) accounts for the other 92%. Both matter — but in proportion.' Nuance: which decisions are structural vs. individual?",
+ "tip":"Individual action is real but limited. Quantify the proportion — 8% vs 92% is your key number."},
+
+{"id":6,"topic":"climate","age":27,"role":"Engineer","lang":"en",
+ "argument":"Technology will solve most climate issues. Innovation is progressing rapidly. Renewable energy is becoming cheaper.",
+ "bonuses":[B_STRUCT,B_EVID],"penalties":[P_SURVIV,P_HASTY],
+ "fallacies":["survivorship_bias","hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID],[P_SURVIV,P_HASTY]),
+ "quality":"weak",
+ "coaching":"Survivorship bias: you cite renewables (working) but not carbon capture (failing), nuclear fusion (still experimental), or green hydrogen (expensive). 'Most climate issues' is a massive claim. Stronger: 'Solar LCOE dropped 89% in 10 years (IRENA 2023) — electricity generation is being solved. Hard-to-abate sectors (steel, cement, aviation) at 30% of emissions have NO cost-effective tech solution yet. Technology is necessary but not sufficient.'",
+ "tip":"Solar is a success — but name the sectors technology hasn't solved yet. That's the honest version."},
+
+{"id":7,"topic":"climate","age":24,"role":"Farmer","lang":"en",
+ "argument":"Climate change is already affecting us directly. Weather patterns are unpredictable. Harvests are less reliable.",
+ "bonuses":[B_STRUCT,B_INSIDER,B_EVID],"penalties":[P_ANEC],
+ "fallacies":[],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_INSIDER,B_EVID],[P_ANEC]),
+ "quality":"strong",
+ "coaching":"Strongest climate argument in this corpus. Insider professional observation + logical structure. Upgrade: 'Agricultural yield variability has increased 35% in the last 20 years in Europe (FAO 2022). A 2°C warming scenario projects −10% wheat yields in Central Europe. This translates directly to food price inflation of 7-10%.' Your observation has global data backing it.",
+ "tip":"You have the best argument here. Add FAO yield data — your experience becomes everyone's reality."},
+
+{"id":8,"topic":"climate","age":29,"role":"Politician","lang":"en",
+ "argument":"Policies need to balance economy and environment. Extreme measures can backfire. Public resistance is growing.",
+ "bonuses":[B_STRUCT,B_COUNTER,B_NUANCE],"penalties":[P_EPI],
+ "fallacies":["epistemic_cowardice"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_COUNTER,B_NUANCE],[P_EPI]),
+ "quality":"adequate",
+ "coaching":"'Balance' without specifics is political epistemic cowardice. What IS the right balance? France's carbon tax caused gilets jaunes — valid evidence of backlash. Stronger: 'Carbon pricing with revenue recycled as dividend to citizens (Canada model: 80% of households receive more back than they pay) achieves emissions cuts without regressive effects or public resistance.' That's balance with a mechanism.",
+ "tip":"'Balance' means nothing without a mechanism. Name the specific policy that achieves both goals."},
+
+{"id":9,"topic":"climate","age":23,"role":"Urban Resident","lang":"en",
+ "argument":"Cities need stricter environmental rules. Pollution is a daily problem. Air quality is often poor.",
+ "bonuses":[B_STRUCT,B_INSIDER],"penalties":[P_HASTY,P_VAGUE],
+ "fallacies":["hasty_generalization","vague_quantifier"],
+ "style":"narrative","intuition":False,
+ "score":score([B_STRUCT,B_INSIDER],[P_HASTY,P_VAGUE]),
+ "quality":"adequate",
+ "coaching":"Urban air quality is a real problem with strong data available. 'Often poor' is vague — use it: 'WHO air quality guidelines are exceeded on 40% of days in European cities (EEA 2023). Air pollution causes 400,000 premature deaths/year in Europe.' Then specify the rule: 'Low Emission Zones reduce NO₂ by 18-25% in city centers (LSE 2022).' Insider observation → policy proposal.",
+ "tip":"WHO data and EEA 2023 report will transform this from complaint to evidence."},
+
+{"id":10,"topic":"climate","age":26,"role":"Skeptic","lang":"en",
+ "argument":"Some climate claims are exaggerated. Not all predictions come true. Past forecasts were sometimes inaccurate.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_STRAW,P_VAGUE],
+ "fallacies":["hasty_generalization","straw_man","vague_quantifier"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT],[P_HASTY,P_STRAW,P_VAGUE]),
+ "quality":"weak",
+ "coaching":"Three compounding errors. Straw man: no credible scientist claims 100% accuracy. 'Sometimes inaccurate' — in which direction? IPCC has systematically underestimated sea level rise and arctic ice loss (Nature 2022). The honest skeptic argument: 'Specific projections have uncertainty ranges — policy should be robust to that uncertainty, not deny it.' That's intellectually coherent.",
+ "tip":"'Some predictions wrong' is true in every science. The question is: which direction is the error? Climate science consistently underestimates."},
+
+# ══════════════════════════════════════
+# REMOTE EDUCATION (11–20)
+# ══════════════════════════════════════
+
+{"id":11,"topic":"remote_education","age":20,"role":"Student","lang":"en",
+ "argument":"Online education is more flexible than traditional classes. Students can learn from anywhere and manage their own schedules. I attend lectures from home and save commuting time.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_ANEC],
+ "fallacies":["hasty_generalization"],
+ "style":"narrative","intuition":False,
+ "score":score([B_STRUCT],[P_HASTY,P_ANEC]),
+ "quality":"weak",
+ "coaching":"Flexibility is real — but generalized from one student. 'Flexibility' benefits differ massively by student situation: working adults gain; students needing structured environments lose. Add: 'For non-traditional students (working adults, parents, rural residents), online enrollment increased 34% (NCES 2022) — demonstrating genuine unmet demand. However, first-generation college students show 15% lower completion rates online (Community College Research Center 2021).'",
+ "tip":"Flexibility is real but not universal. Say who benefits and who doesn't."},
+
+{"id":12,"topic":"remote_education","age":30,"role":"Teacher","lang":"en",
+ "argument":"Online classes reduce the quality of learning. Students participate less and interaction is limited. In virtual classes, many students keep cameras off and don't engage.",
+ "bonuses":[B_STRUCT,B_INSIDER],"penalties":[P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_INSIDER],[P_HASTY]),
+ "quality":"adequate",
+ "coaching":"Professional observation is valid insider evidence. Strengthen: 'Stanford's virtual classroom research shows a 23% reduction in student verbal participation in synchronous online sessions (Deslauriers et al. 2019). Camera-off behavior correlates with 18% lower exam scores (MIT 2021). However, well-designed async courses with discussion boards show equivalent outcomes to in-person (Means et al. 2013 meta-analysis).' The format matters more than the medium.",
+ "tip":"Your observation is backed by Stanford data. Add it — and note that well-designed online can work."},
+
+{"id":13,"topic":"remote_education","age":24,"role":"Parent","lang":"en",
+ "argument":"Remote education is difficult for younger students. Children need supervision and structure. My child gets distracted easily during online lessons.",
+ "bonuses":[B_STRUCT,B_COUNTER],"penalties":[P_ANEC,P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"narrative","intuition":True,
+ "intuition_concept":"developmental_appropriateness",
+ "score":score([B_STRUCT,B_COUNTER],[P_ANEC,P_HASTY]),
+ "quality":"adequate",
+ "coaching":"⭐ INTUITION: You're describing developmental appropriateness — a pedagogical principle. 'Self-regulation capacity, required for effective online learning, develops gradually through adolescence (Piaget). Children under 12 lack the metacognitive skills needed for unsupervised digital learning (Hattie 2020). K-8 online dropout rates ran 3.5x higher than high school during COVID (Stanford 2022).' Your child's distraction is a developmental signal, not a personal failing.",
+ "tip":"'My child is distracted' → 'Children under 12 lack the metacognitive skills for self-directed online learning — cite Hattie 2020.'"},
+
+{"id":14,"topic":"remote_education","age":27,"role":"Tech Worker","lang":"en",
+ "argument":"Digital tools improve how we learn. They allow interactive and personalized learning experiences. Platforms with quizzes and videos help explain complex topics.",
+ "bonuses":[B_STRUCT,B_EVID],"penalties":[P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID],[P_HASTY]),
+ "quality":"adequate",
+ "coaching":"Solid direction but generalized. 'Digital tools improve learning' is only true for specific formats. Upgrade: 'Adaptive learning platforms (Khan Academy, Duolingo) show 1.8x faster skill acquisition vs. traditional instruction in RCT studies (ASSISTments 2021). However, passive video consumption without active retrieval practice shows no learning benefit (Roediger & Butler 2011). The tool matters less than the pedagogy.'",
+ "tip":"Not all digital tools are equal. Interactive + retrieval practice = proven. Passive video = not proven."},
+
+{"id":15,"topic":"remote_education","age":22,"role":"Student","lang":"en",
+ "argument":"Online learning saves money. Students don't need to pay for transport or housing. I didn't have to move to another city for university.",
+ "bonuses":[B_STRUCT,B_EVID],"penalties":[P_ANEC],
+ "fallacies":[],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID],[P_ANEC]),
+ "quality":"strong",
+ "coaching":"Cost argument is solid and often overlooked. Strengthen: 'Online students save an average of $5,000-11,000/year on housing and transport (College Board 2023). When combined with lower tuition at many online programs, total cost of degree can be 40-60% lower. This makes HE accessible to first-generation students without debt burdens.' The equity angle elevates this beyond personal savings.",
+ "tip":"You're right. Add: cost savings make HE accessible to students who couldn't otherwise attend. That's the equity argument."},
+
+{"id":16,"topic":"remote_education","age":28,"role":"Professor","lang":"en",
+ "argument":"Academic integrity is harder to maintain online. It's easier for students to cheat during exams. Monitoring online tests is much more difficult.",
+ "bonuses":[B_STRUCT,B_INSIDER,B_EVID],"penalties":[],
+ "fallacies":[],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_INSIDER,B_EVID],[]),
+ "quality":"strong",
+ "coaching":"Best academic integrity argument in corpus. Insider + evidence + structure. Strengthen: 'Academic dishonesty rates increased 55-67% during COVID remote exams (International Center for Academic Integrity 2021). However, open-book assessments and project-based evaluation show equivalent learning outcomes to proctored exams at 40% lower dishonesty rates (MIT 2022).' Offer the solution alongside the problem.",
+ "tip":"Near-perfect. Add the solution: open-book/project-based assessment. Problem + solution = policy proposal."},
+
+{"id":17,"topic":"remote_education","age":25,"role":"Freelancer","lang":"en",
+ "argument":"Skills matter more than formal education settings. Real-world ability is more important than attendance. Many successful developers are self-taught online.",
+ "bonuses":[B_STRUCT],"penalties":[P_SURVIV,P_HASTY],
+ "fallacies":["survivorship_bias","hasty_generalization"],
+ "style":"narrative","intuition":False,
+ "score":score([B_STRUCT],[P_SURVIV,P_HASTY]),
+ "quality":"weak",
+ "coaching":"Classic survivorship bias: you see the successful self-taught developers, not the far larger group who couldn't break in without credentials. 'Many successful developers' — what % of total? LinkedIn data: 72% of software engineers have CS degrees (2023). Self-taught PATH exists but is much harder. Stronger: 'For specific technical skills (coding, design), portfolio-based hiring is growing — but for management, finance, and research, credentials remain gatekeepers for good reasons (signaling theory).'",
+ "tip":"You see the winners of self-teaching. Name the drop-out rate too. That's the honest version."},
+
+{"id":18,"topic":"remote_education","age":19,"role":"Student","lang":"en",
+ "argument":"Remote learning feels isolating. There is little social interaction. I barely know my classmates in online courses.",
+ "bonuses":[B_STRUCT],"penalties":[P_EMOTION_S,P_ANEC],
+ "fallacies":["appeal_to_emotion_soft"],
+ "style":"emotional","intuition":True,
+ "intuition_concept":"social_belonging_in_learning",
+ "score":score([B_STRUCT],[P_EMOTION_S,P_ANEC]),
+ "quality":"adequate",
+ "coaching":"⭐ INTUITION: You're describing 'sense of belonging' — one of the strongest predictors of academic success. Formal version: 'Social belonging is among the top 3 predictors of university completion (Walton & Cohen 2011). Students who report low belonging are 2.4x more likely to drop out (CCRC 2022). Online-only students report 67% lower sense of belonging than hybrid students (UCLA 2021).' Your loneliness is a dropout risk factor — that's a policy argument.",
+ "tip":"'I feel isolated' → 'Low sense of belonging predicts dropout. Online students report 67% lower belonging — cite UCLA 2021.'"},
+
+{"id":19,"topic":"remote_education","age":29,"role":"Administrator","lang":"en",
+ "argument":"Hybrid education models are the future. They combine flexibility with in-person benefits. Some lectures can be online, while discussions happen in class.",
+ "bonuses":[B_STRUCT,B_NUANCE,B_COUNTER],"penalties":[P_EPI],
+ "fallacies":["epistemic_cowardice"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_NUANCE,B_COUNTER],[P_EPI]),
+ "quality":"adequate",
+ "coaching":"'Hybrid is the future' without evidence is administrative epistemic cowardice. What specifically should be online vs. in-person? Evidence: 'Meta-analysis of 212 studies shows hybrid outperforms both pure online and pure in-person by 0.35 standard deviations (Means et al. 2013). Optimal split: content delivery online (async), collaborative problem-solving in-person. This isn't a compromise — it's a structural upgrade.'",
+ "tip":"You have the right answer — now show the Means 2013 meta-analysis. 212 studies agree with you."},
+
+{"id":20,"topic":"remote_education","age":23,"role":"Student","lang":"en",
+ "argument":"Motivation is lower in online education. There is less structure and accountability. I tend to procrastinate more when studying from home.",
+ "bonuses":[B_STRUCT],"penalties":[P_ANEC,P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"narrative","intuition":True,
+ "intuition_concept":"self_regulation_demand",
+ "score":score([B_STRUCT],[P_ANEC,P_HASTY]),
+ "quality":"adequate",
+ "coaching":"⭐ INTUITION: You're describing self-regulation demand mismatch. 'Online learning requires 60-80% higher self-regulation capacity than in-person (Zimmerman 2002). Students who lack these metacognitive skills — often first-generation or younger students — show 34% lower completion rates online (CCRC 2022). Your procrastination is a skill gap, not a character flaw — and it's predictable and teachable.' The solution: explicit self-regulation training in online programs.",
+ "tip":"'I procrastinate' → 'Online demands self-regulation skills that most students were never taught — cite Zimmerman 2002.'"},
+
+# ══════════════════════════════════════
+# CRYPTOCURRENCY (21–30)
+# ══════════════════════════════════════
+
+{"id":21,"topic":"cryptocurrency","age":26,"role":"Investor","lang":"en",
+ "argument":"Cryptocurrency is the future of finance. It allows decentralized transactions without intermediaries. I can send money globally without a bank.",
+ "bonuses":[B_STRUCT,B_EVID],"penalties":[P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID],[P_HASTY]),
+ "quality":"adequate",
+ "coaching":"'Future of finance' is a massive claim from one feature. Decentralization is real — but its advantages are contested. Upgrade: 'Cross-border remittances via crypto cost 1-3% vs. traditional wire transfer 6-7% (World Bank 2023). For the 1.4bn unbanked globally, crypto wallets provide first-time financial access. But 99% of daily crypto transactions are speculation, not remittances (BIS 2023) — which challenges the 'future of finance' thesis.'",
+ "tip":"'Future of finance' is too big. 'Solves remittances for unbanked populations' is a strong, specific, defensible claim."},
+
+{"id":22,"topic":"cryptocurrency","age":30,"role":"Banker","lang":"en",
+ "argument":"Crypto is too unstable to be reliable. Prices fluctuate too much. Values can drop 20% in a single day.",
+ "bonuses":[B_STRUCT,B_EVID,B_INSIDER],"penalties":[],
+ "fallacies":[],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID,B_INSIDER],[]),
+ "quality":"strong",
+ "coaching":"Strongest anti-crypto argument. Professional + data + structure. Upgrade: 'Bitcoin's 30-day volatility averages 60-80% annualized vs. USD/EUR at 8-10% (Bloomberg 2023). For currency to function, price stability is required — volatile currencies trigger Gresham's Law (bad money drives out good). However: stablecoins (USDC, USDT) address this specifically — your argument applies to volatile crypto, not the full ecosystem.',",
+ "tip":"Add 60-80% annualized volatility number. Then acknowledge stablecoins to avoid straw man."},
+
+{"id":23,"topic":"cryptocurrency","age":24,"role":"Developer","lang":"en",
+ "argument":"Blockchain technology has real potential. It increases transparency and security. Smart contracts execute automatically.",
+ "bonuses":[B_STRUCT,B_EVID],"penalties":[P_EPI,P_HASTY],
+ "fallacies":["epistemic_cowardice","hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID],[P_EPI,P_HASTY]),
+ "quality":"adequate",
+ "coaching":"'Real potential' is epistemic cowardice — where specifically? Smart contracts are real but overhyped. 'The DAO hack (2016, $60M lost), Ronin bridge hack (2022, $625M) show that smart contract code vulnerabilities are catastrophic and irreversible. Blockchain works for: supply chain transparency (Maersk/IBM TradeLens), cross-border settlement (JPMorgan Onyx). It fails for: simple databases where centralized systems are faster and cheaper (95% of proposed use cases).'",
+ "tip":"'Real potential' → name one specific use case blockchain provably improves over alternatives."},
+
+{"id":24,"topic":"cryptocurrency","age":22,"role":"Student","lang":"en",
+ "argument":"Crypto is too risky for beginners. Many people don't understand it. New investors often lose money quickly.",
+ "bonuses":[B_STRUCT,B_COUNTER],"penalties":[P_HASTY,P_VAGUE],
+ "fallacies":["hasty_generalization","vague_quantifier"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_COUNTER],[P_HASTY,P_VAGUE]),
+ "quality":"adequate",
+ "coaching":"Correct intuition, weak evidence. 'Many' and 'often' are vague quantifiers. Data: '73% of retail crypto investors were underwater at peak bear market (2022, Chainalysis). Average retail investor underperforms market by 4.3% annually in crypto due to buy-high-sell-low behavior (NBER 2023). Compared to index fund investing, the risk-adjusted return is significantly worse for the bottom 80% of investors.' Now it's an evidence-based warning.",
+ "tip":"73% of retail investors were underwater at 2022 bear market peak. That number does the work for you."},
+
+{"id":25,"topic":"cryptocurrency","age":28,"role":"Entrepreneur","lang":"en",
+ "argument":"Crypto creates new business opportunities. It enables new financial systems. DeFi platforms offer lending without banks.",
+ "bonuses":[B_STRUCT,B_EVID],"penalties":[P_SURVIV,P_HASTY],
+ "fallacies":["survivorship_bias","hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID],[P_SURVIV,P_HASTY]),
+ "quality":"weak",
+ "coaching":"DeFi opportunity is real but survivorship-biased. 'DeFi platforms lost $3.8bn to hacks and exploits in 2022 alone (Chainalysis). 90% of DeFi protocols launched in 2021 have zero users by 2024. The 10% that survive represent genuine innovation — but selection bias makes the failure rate invisible to entrepreneurs.' Honest version: 'DeFi has solved specific lending problems (collateralized, permissionless) for crypto-native users — but mass-market finance requires regulatory integration.'",
+ "tip":"$3.8bn lost to DeFi hacks in 2022. Name the failure rate to make your success story credible."},
+
+{"id":26,"topic":"cryptocurrency","age":27,"role":"Economist","lang":"en",
+ "argument":"Regulation is necessary for crypto markets. It prevents fraud and scams. Many fake projects steal investor money.",
+ "bonuses":[B_STRUCT,B_EVID,B_COUNTER],"penalties":[P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID,B_COUNTER],[P_HASTY]),
+ "quality":"strong",
+ "coaching":"Strong economic argument. Strengthen: '$7.7bn lost to crypto scams in 2021 (FBI). Rug pulls (project abandonment after fundraising) account for 37% of all crypto crime revenue. EU MiCA regulation (2024) addresses this with mandatory reserves, disclosure rules, and issuer liability — early data shows 60% reduction in EU-based scam projects.' Now it's a policy argument with mechanism.",
+ "tip":"Add EU MiCA as the specific regulatory model that works. Data + existing solution = complete argument."},
+
+{"id":27,"topic":"cryptocurrency","age":23,"role":"Gamer","lang":"en",
+ "argument":"Crypto integration in gaming is exciting. Players can own digital assets. NFT items can be traded between players.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_EMOTION_H],
+ "fallacies":["hasty_generalization","appeal_to_emotion_hard"],
+ "style":"emotional","intuition":False,
+ "score":score([B_STRUCT],[P_HASTY,P_EMOTION_H]),
+ "quality":"weak",
+ "coaching":"'Exciting' is not an argument. NFT gaming is empirically failing: 'Axie Infinity peaked at 2.7M daily users in 2021, now has <50,000 (95% decline). NFT games suffer from 'play-to-earn' economic collapse when token value falls. Players don't want ownership — they want fun (Steam survey 2022: only 4% of gamers want NFT features). The exception: tradable cosmetics in games without P2E mechanics (CS:GO skins marketplace: $1bn/year without blockchain).'",
+ "tip":"Axie Infinity lost 95% of players. Ownership ≠ fun. Cite the Steam survey."},
+
+{"id":28,"topic":"cryptocurrency","age":29,"role":"Critic","lang":"en",
+ "argument":"Crypto is mostly speculation. Prices are driven by hype. Meme coins rise without real value.",
+ "bonuses":[B_STRUCT,B_EVID,B_COUNTER],"penalties":[],
+ "fallacies":[],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID,B_COUNTER],[]),
+ "quality":"strong",
+ "coaching":"Best critic argument. Evidence + structure + implicit counterargument. Upgrade: 'Meme coins (DOGE, SHIB, PEPE) represent $40bn market cap with no technical differentiation from each other (2023). 78% of tokens launched in 2022 were effectively dead within 6 months (Chainalysis). But: Bitcoin's use as inflation hedge showed 0.89 correlation with gold during 2022 high-inflation period (Bloomberg). Speculation dominates but productive use cases exist in the tail.'",
+ "tip":"Near-perfect. Acknowledge Bitcoin's inflation-hedge correlation — then your critique of meme coins is unanswerable."},
+
+{"id":29,"topic":"cryptocurrency","age":25,"role":"Tech Enthusiast","lang":"en",
+ "argument":"Decentralization is powerful. It reduces control by central institutions. No central bank controls Bitcoin.",
+ "bonuses":[B_STRUCT],"penalties":[P_EPI,P_HASTY],
+ "fallacies":["epistemic_cowardice","hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT],[P_EPI,P_HASTY]),
+ "quality":"adequate",
+ "coaching":"'Powerful' is epistemic cowardice — powerful for whom? In what context? Decentralization has genuine value in: authoritarian regimes (Venezuela, Turkey: crypto usage surged during currency crises), remittances (saving billions in fees), censorship-resistant payments. It has zero advantage for: everyday stable-economy transactions, contract enforcement (still needs courts), dispute resolution. Context is everything.",
+ "tip":"'Decentralization is powerful' — for whom? Name the specific context where it provably wins."},
+
+{"id":30,"topic":"cryptocurrency","age":21,"role":"Student","lang":"en",
+ "argument":"Crypto is too complicated. It requires technical knowledge. Wallets and private keys confuse beginners.",
+ "bonuses":[B_STRUCT,B_COUNTER],"penalties":[P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_COUNTER],[P_HASTY]),
+ "quality":"adequate",
+ "coaching":"Complexity is real but evolving. Strengthen: '60% of crypto users have lost funds due to key management errors (Chainalysis 2022). However, custodial wallets (Coinbase, Kraken) abstract this complexity — at the cost of decentralization. The UX barrier is real for self-custody but largely solved for custodial products. Your argument is strongest against self-custody crypto, not crypto per se.'",
+ "tip":"Complexity is a real barrier — but custodial wallets solve it. State which version of crypto you're critiquing."},
+
+# ══════════════════════════════════════
+# AI ETHICS (31–40)
+# ══════════════════════════════════════
+
+{"id":31,"topic":"ai_ethics","age":24,"role":"Researcher","lang":"en",
+ "argument":"AI needs strict ethical guidelines. It can cause harm if misused. Bias in algorithms affects decisions.",
+ "bonuses":[B_STRUCT,B_EVID],"penalties":[P_HASTY,P_VAGUE],
+ "fallacies":["hasty_generalization","vague_quantifier"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID],[P_HASTY,P_VAGUE]),
+ "quality":"adequate",
+ "coaching":"'Strict guidelines' and 'harm if misused' are vague. What specific guideline? What specific harm? Upgrade: 'COMPAS recidivism algorithm misclassified Black defendants as high-risk at 2x the rate of white defendants (ProPublica 2016). Amazon's hiring AI penalized CVs mentioning women's colleges (Reuters 2018). EU AI Act (2024) mandates bias auditing for high-risk systems — this is the specific guideline.' Now it's a policy argument with evidence.",
+ "tip":"Name COMPAS and Amazon's hiring AI. Those two examples do more than 'bias in algorithms.'"},
+
+{"id":32,"topic":"ai_ethics","age":27,"role":"Developer","lang":"en",
+ "argument":"Too many rules will slow AI progress. Innovation depends on freedom. Startups struggle with heavy regulation.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_DICHOT,P_SLOPE],
+ "fallacies":["hasty_generalization","false_dichotomy","slippery_slope"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT],[P_HASTY,P_DICHOT,P_SLOPE]),
+ "quality":"weak",
+ "coaching":"Three compounding errors. False dichotomy: rules vs. innovation is not binary. Aviation regulation made aircraft safer AND faster. Medical regulation made drugs safer AND more effective. Slippery slope: EU AI Act doesn't ban AI — it classifies by risk level. Startups with low-risk AI face zero additional compliance. 'Heavy regulation' is a straw man of what's actually proposed.",
+ "tip":"Aviation and pharmaceuticals: heavily regulated AND highly innovative. Regulation ≠ innovation-stopper."},
+
+{"id":33,"topic":"ai_ethics","age":22,"role":"Student","lang":"en",
+ "argument":"AI should be transparent. People need to understand decisions. Black-box systems are hard to trust.",
+ "bonuses":[B_STRUCT,B_EVID,B_COUNTER],"penalties":[],
+ "fallacies":[],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID,B_COUNTER],[]),
+ "quality":"strong",
+ "coaching":"Clean logical argument. Strengthen with evidence and nuance: 'The 'right to explanation' exists in EU GDPR for automated decisions (Article 22). However, full transparency creates adversarial gaming — if a loan algorithm is fully transparent, applicants optimize inputs rather than improving creditworthiness. Interpretable AI (LIME, SHAP) offers a middle ground: human-understandable explanations without exposing exploitable model internals.'",
+ "tip":"Strong argument. Add GDPR Article 22 + LIME/SHAP as the technical solution. Then it's complete."},
+
+{"id":34,"topic":"ai_ethics","age":30,"role":"Manager","lang":"en",
+ "argument":"AI improves efficiency significantly. It automates repetitive tasks. Customer support is handled by bots.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_SURVIV],
+ "fallacies":["hasty_generalization","survivorship_bias"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT],[P_HASTY,P_SURVIV]),
+ "quality":"weak",
+ "coaching":"'Significantly' is survivorship-biased to successful deployments. Data: 'McKinsey 2023: AI improves productivity 15-40% in specific tasks (data extraction, document classification). But: 70% of enterprise AI deployments fail to reach production (Gartner 2023). Customer service chatbots reduce cost by $1.3bn/year globally — but customer satisfaction scores dropped 12% in bot-first organizations (Accenture 2022). Efficiency ≠ effectiveness.'",
+ "tip":"Add: 70% of AI deployments fail (Gartner). Your efficiency gains are real — name the success cases specifically."},
+
+{"id":35,"topic":"ai_ethics","age":25,"role":"Journalist","lang":"en",
+ "argument":"AI can spread misinformation. Content can be generated quickly. Fake news articles look real.",
+ "bonuses":[B_STRUCT,B_EVID,B_COUNTER],"penalties":[],
+ "fallacies":[],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID,B_COUNTER],[]),
+ "quality":"strong",
+ "coaching":"Solid journalism perspective. Strengthen: 'MIT study 2023: GPT-4 generated political misinformation is rated as credible by 49% of readers vs. 50% for real news — effectively indistinguishable. NewsGuard tracked 49 'AI-generated news' sites in 2023 producing 5,000+ false articles. Countermeasure: AI content watermarking (C2PA standard) — but adoption is only 12% of major platforms.' Problem + scale + partial solution.",
+ "tip":"Near-perfect. Add C2PA watermarking as the solution being attempted — and its 12% adoption rate."},
+
+{"id":36,"topic":"ai_ethics","age":28,"role":"Lawyer","lang":"en",
+ "argument":"Legal frameworks are lagging behind AI. Technology evolves faster than laws. No clear rules for AI liability.",
+ "bonuses":[B_STRUCT,B_INSIDER,B_EVID],"penalties":[],
+ "fallacies":[],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_INSIDER,B_EVID],[]),
+ "quality":"strong",
+ "coaching":"Best legal argument. Insider + evidence + structure. Strengthen: 'EU AI Act (2024) is the first comprehensive AI legal framework — but covers EU only. US has no equivalent federal law (state-level patchwork). Liability gap: when an AI misdiagnoses a patient, is the hospital, vendor, or developer liable? No court has established precedent (as of 2024). Compare: GDPR took 4 years from proposal to enforcement — AI liability will take longer given higher complexity.'",
+ "tip":"Add EU AI Act as the leading attempt, note US has nothing equivalent, and give the medical liability example."},
+
+{"id":37,"topic":"ai_ethics","age":23,"role":"Designer","lang":"en",
+ "argument":"AI threatens creative professions. It can replicate artistic styles. Generated art competes with human artists.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_EMOTION_S],
+ "fallacies":["hasty_generalization","appeal_to_emotion_soft"],
+ "style":"emotional","intuition":True,
+ "intuition_concept":"creative_labor_displacement",
+ "score":score([B_STRUCT],[P_HASTY,P_EMOTION_S]),
+ "quality":"adequate",
+ "coaching":"⭐ INTUITION: You're describing creative labor displacement — an economic phenomenon with measurable effects. 'Stock image platforms (Shutterstock, Getty) saw 50% decline in new contributor submissions in 2023 (Bloomberg). Midjourney generated 15M images/day at peak — replacing estimated $300M/year in commercial illustration work. However: concept art, art direction, and creative strategy are growing roles (Adobe, Sony, Disney all hiring more creative directors). Commodity creative work is at risk; conceptual creative work is growing.'",
+ "tip":"$300M/year in displaced illustration work (Bloomberg). But concept art director roles are growing. State both."},
+
+{"id":38,"topic":"ai_ethics","age":29,"role":"Entrepreneur","lang":"en",
+ "argument":"AI is essential for business growth. It increases productivity. Data analysis is automated.",
+ "bonuses":[B_STRUCT],"penalties":[P_HASTY,P_SURVIV,P_EPI],
+ "fallacies":["hasty_generalization","survivorship_bias","epistemic_cowardice"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT],[P_HASTY,P_SURVIV,P_EPI]),
+ "quality":"weak",
+ "coaching":"Three compounding errors. 'Essential' is too strong — most businesses functioned without AI until 2022. 'Increases productivity' — show data. 'Data analysis is automated' — automated to what standard? Evidence: 'GitHub Copilot increases developer output by 55% for code completion tasks (GitHub 2023). But: AI-generated code has 3x higher bug rate than human-reviewed code (Stanford 2023). The productivity gain is real in specific contexts — not universal.'",
+ "tip":"GitHub Copilot +55% output — but 3x more bugs. Productivity gain is real AND conditional. Say both."},
+
+{"id":39,"topic":"ai_ethics","age":21,"role":"Student","lang":"en",
+ "argument":"AI makes learning easier. Information is instantly accessible. I use AI tools for explanations.",
+ "bonuses":[B_STRUCT],"penalties":[P_ANEC,P_HASTY],
+ "fallacies":["hasty_generalization","anecdote_only"],
+ "style":"narrative","intuition":True,
+ "intuition_concept":"ai_tutoring_potential",
+ "score":score([B_STRUCT],[P_ANEC,P_HASTY]),
+ "quality":"weak",
+ "coaching":"⭐ INTUITION: AI tutoring is one of the most promising education innovations. 'Bloom's 2-sigma problem (1984): individual tutoring produces 2 standard deviation improvement vs. classroom instruction. AI tutors can provide this at scale — Khanmigo shows 1 sigma improvement in initial trials (Khan Academy 2023). However: AI tutors risk replacing effortful practice with passive answer-getting, which reduces long-term retention (desirable difficulties theory).'",
+ "tip":"'AI helps me learn' → '2-sigma problem: AI tutoring could democratize the learning advantage of personal tutors. Cite Bloom 1984 + Khanmigo 2023.'"},
+
+{"id":40,"topic":"ai_ethics","age":26,"role":"Activist","lang":"en",
+ "argument":"AI can increase inequality. Access is not equal. Big companies benefit more than individuals.",
+ "bonuses":[B_STRUCT,B_EVID,B_COUNTER],"penalties":[P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID,B_COUNTER],[P_HASTY]),
+ "quality":"strong",
+ "coaching":"Strong equity argument. Strengthen: 'Top 5 AI companies (Google, Microsoft, Meta, Amazon, Apple) control 90% of foundational AI compute (Stanford HAI 2024). GPT-4 API costs $0.03/1000 tokens — viable for businesses, not for rural schools in developing countries with $3/month internet. Digital divide in AI is 2-3 generations behind internet adoption curve. However: open-source models (Llama 3, Mistral) are democratizing access — the gap is real but narrowing.'",
+ "tip":"90% of AI compute owned by 5 companies. That's your number. Then acknowledge open-source is closing the gap."},
+
+# ══════════════════════════════════════
+# UNIVERSAL BASIC INCOME (41–50)
+# ══════════════════════════════════════
+
+{"id":41,"topic":"ubi","age":23,"role":"Student","lang":"en",
+ "argument":"UBI would reduce poverty. Everyone gets a basic income. People can afford basic needs.",
+ "bonuses":[B_STRUCT],"penalties":[P_CIRCUL,P_HASTY],
+ "fallacies":["circular_reasoning","hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT],[P_CIRCUL,P_HASTY]),
+ "quality":"weak",
+ "coaching":"Circular: 'UBI reduces poverty because everyone gets money' — that's the mechanism not the argument. Evidence needed: 'Finland's 2017-2018 UBI pilot (€560/month, 2000 participants): poverty reduced by 3% and wellbeing increased significantly with no employment reduction (LSE evaluation). Kenya GiveDirectly program: $0.75/day UBI over 12 years shows 40% increase in earnings, 22% asset growth, 63% lower hunger (J-PAL 2023). The mechanism works — cite the trials.'",
+ "tip":"Finland pilot + Kenya GiveDirectly. Real trials, real data. Use them instead of circular logic."},
+
+{"id":42,"topic":"ubi","age":30,"role":"Economist","lang":"en",
+ "argument":"UBI is too expensive. It requires massive funding. Taxes would have to increase significantly.",
+ "bonuses":[B_STRUCT,B_EVID,B_INSIDER],"penalties":[P_EPI],
+ "fallacies":["epistemic_cowardice"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID,B_INSIDER],[P_EPI]),
+ "quality":"strong",
+ "coaching":"Solid economic critique. 'Too expensive' needs specifics. Add: 'A US UBI of $12,000/year for all adults would cost $3.8 trillion/year — roughly the entire federal budget (Roosevelt Institute). Funded by VAT alone, it would require a 22% VAT (Mankiw 2022). However: replacing existing welfare programs captures $700bn, eliminating administrative overhead saves $200bn more. Net cost: $2.9 trillion — still massive, but financing models exist (wealth tax, carbon dividend).'",
+ "tip":"$3.8 trillion total, $2.9 trillion net after welfare consolidation. Give both numbers."},
+
+{"id":43,"topic":"ubi","age":25,"role":"Worker","lang":"en",
+ "argument":"UBI could reduce motivation to work. People might rely on free money. Some may stop working entirely.",
+ "bonuses":[B_STRUCT,B_COUNTER],"penalties":[P_HASTY,P_SLOPE],
+ "fallacies":["hasty_generalization","slippery_slope"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_COUNTER],[P_HASTY,P_SLOPE]),
+ "quality":"adequate",
+ "coaching":"'Some may stop' is slippery slope. Evidence refutes the premise: 'In every UBI pilot to date (Finland, Kenya, Stockton CA, Manitoba Mincome), employment rates did not fall significantly. Manitoba Mincome (1974-1979): only two groups worked less — new mothers and teenagers staying in school. Both are arguably positive outcomes. The labor supply argument is empirically weak — intrinsic motivation to work is strong across cultures.'",
+ "tip":"Every UBI pilot failed to show employment drop. Manitoba data specifically: the only people who worked less were mothers and students."},
+
+{"id":44,"topic":"ubi","age":28,"role":"Entrepreneur","lang":"en",
+ "argument":"UBI encourages innovation. People can take risks. More startups could emerge.",
+ "bonuses":[B_STRUCT,B_COUNTER],"penalties":[P_HASTY,P_SURVIV],
+ "fallacies":["hasty_generalization","survivorship_bias"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_COUNTER],[P_HASTY,P_SURVIV]),
+ "quality":"adequate",
+ "coaching":"Interesting angle but survivorship-biased to successful risk-takers. Evidence: 'Stockton SEED pilot (UBI $500/month): entrepreneurship and full-time employment both increased vs. control group (SEED 2021). Economic security removes downside risk — important for first-generation entrepreneurs without family wealth safety nets. However: most startups fail — UBI makes risk-taking more accessible, not less risky.'",
+ "tip":"Stockton SEED: employment AND entrepreneurship both increased with UBI. Use that data."},
+
+{"id":45,"topic":"ubi","age":22,"role":"Student","lang":"en",
+ "argument":"UBI would create fairness. Everyone gets equal support. No one falls below a minimum income.",
+ "bonuses":[B_STRUCT],"penalties":[P_EPI,P_HASTY],
+ "fallacies":["epistemic_cowardice","hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT],[P_EPI,P_HASTY]),
+ "quality":"adequate",
+ "coaching":"'Fairness' is epistemic cowardice — define it. Equal payment is not equitable: a UBI of $1,000/month means more to someone in poverty than to a millionaire. More precise: 'Means-tested programs have 30% administrative leakage (CBPP 2022). Universal programs eliminate stigma and bureaucracy — Nordic child benefit (universal, not means-tested) has higher take-up and lower admin cost than US SNAP (selective).' That's the efficiency argument for universality.",
+ "tip":"Universal programs have lower admin cost and no stigma than means-tested programs. That's the real 'fairness' argument."},
+
+{"id":46,"topic":"ubi","age":27,"role":"Taxpayer","lang":"en",
+ "argument":"It's unfair to fund UBI through taxes. Working people pay for others. Higher taxes reduce net income.",
+ "bonuses":[B_STRUCT],"penalties":[P_EMOTION_H,P_HASTY,P_DICHOT],
+ "fallacies":["appeal_to_emotion_hard","hasty_generalization","false_dichotomy"],
+ "style":"emotional","intuition":False,
+ "score":score([B_STRUCT],[P_EMOTION_H,P_HASTY,P_DICHOT]),
+ "quality":"weak",
+ "coaching":"'Unfair' is appeal to emotion without definition. 'Working people pay for others' — all social insurance works this way (healthy pay for sick, young pay for old in pension systems). False dichotomy: taxes don't only reduce income — they fund infrastructure, education, healthcare that increase productivity. The honest version: 'What tax rate increase is acceptable given what UBI delivers?' That's a policy debate, not a fairness claim.",
+ "tip":"All social insurance = working people supporting others. Health insurance, pensions. Why is UBI different?"},
+
+{"id":47,"topic":"ubi","age":24,"role":"Freelancer","lang":"en",
+ "argument":"UBI provides stability. Income is unpredictable otherwise. Freelancers have fluctuating earnings.",
+ "bonuses":[B_STRUCT,B_INSIDER,B_EVID],"penalties":[P_SCOPE],
+ "fallacies":["scope_creep"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_INSIDER,B_EVID],[P_SCOPE]),
+ "quality":"strong",
+ "coaching":"Strong insider argument. Scope creep: your case (freelancers) is the strongest for UBI — but you're implying it generalizes. Upgrade: 'Freelancers, gig workers, and self-employed represent 36% of US workforce (McKinsey 2022) and are excluded from traditional unemployment insurance. UBI functions as a portable benefit that follows the worker, not the employer — addressing the structural gap in safety nets for non-traditional employment. This is the strongest specific case for UBI.'",
+ "tip":"You have the strongest specific case for UBI. 36% of US workforce has no unemployment insurance safety net. That's your number."},
+
+{"id":48,"topic":"ubi","age":29,"role":"Politician","lang":"en",
+ "argument":"UBI simplifies welfare systems. Less bureaucracy is needed. Fewer administrative costs.",
+ "bonuses":[B_STRUCT,B_EVID,B_COUNTER],"penalties":[],
+ "fallacies":[],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_EVID,B_COUNTER],[]),
+ "quality":"strong",
+ "coaching":"Strongest efficiency argument for UBI. Strengthen: 'US welfare system consists of 80+ programs with combined administrative overhead of $67bn/year (Cato Institute). Universal programs have 3-5% admin costs vs. 15-30% for means-tested programs (CBPP). Alaska Permanent Fund (UBI-like, since 1982) has 2% admin cost and zero stigma. The efficiency case is empirically strong — but welfare consolidation is politically difficult.'",
+ "tip":"80+ US welfare programs, $67bn overhead. Alaska Permanent Fund: 2% admin cost. Those numbers make the case."},
+
+{"id":49,"topic":"ubi","age":21,"role":"Student","lang":"en",
+ "argument":"UBI sounds unrealistic. It's hard to implement globally. Different economies have different needs.",
+ "bonuses":[B_STRUCT,B_COUNTER,B_NUANCE],"penalties":[P_EPI],
+ "fallacies":["epistemic_cowardice"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_COUNTER,B_NUANCE],[P_EPI]),
+ "quality":"adequate",
+ "coaching":"'Sounds unrealistic' is epistemic cowardice. What specifically makes it unrealistic? If it's funding: viable models exist (Alaska does it). If it's political will: 18 countries have run pilots. If it's cultural: different versions fit different contexts (unconditional vs. conditional, universal vs. targeted). Stronger: 'National UBI may be unrealistic given fiscal constraints — but city-level pilots (Stockton, Helsinki, Nairobi) demonstrate proof of concept at achievable scale.'",
+ "tip":"'Unrealistic' → specify WHY. Then engage with the evidence that addresses your specific concern."},
+
+{"id":50,"topic":"ubi","age":26,"role":"Social Worker","lang":"en",
+ "argument":"UBI could reduce stress in society. Financial insecurity is a major issue. People worry less about basic survival.",
+ "bonuses":[B_STRUCT,B_INSIDER,B_EVID],"penalties":[P_HASTY],
+ "fallacies":["hasty_generalization"],
+ "style":"analytical","intuition":False,
+ "score":score([B_STRUCT,B_INSIDER,B_EVID],[P_HASTY]),
+ "quality":"strong",
+ "coaching":"Strong wellbeing argument from insider perspective. 'Could reduce' is appropriately hedged. Strengthen: 'Financial stress is the #1 cause of lost productivity globally — costing employers $500bn/year (APA 2022). Finland UBI pilot: wellbeing scores increased by 0.4 standard deviations with no welfare-dependency effect. Chronic financial stress correlates with 3.6x higher healthcare utilization (JAMA 2023). UBI may pay for itself partially through reduced healthcare costs.'",
+ "tip":"Finland pilot: +0.4 SD wellbeing. Healthcare utilization −savings partially offset UBI cost. That's your economic case."},
+]
+
+# ── Compute stats ──────────────────────────────────────────────────────────────
+def compute(corpus):
+    scores = [a["score"] for a in corpus]
+    fallacy_freq = {}
+    quality_dist = {}
+    topic_scores = {}
+    age_scores   = {}
+    intuition_ct = sum(1 for a in corpus if a.get("intuition"))
+
+    for a in corpus:
+        for f in a.get("fallacies",[]):
+            fallacy_freq[f] = fallacy_freq.get(f,0)+1
+        q = a.get("quality","?")
+        quality_dist[q] = quality_dist.get(q,0)+1
+        t = a.get("topic","?")
+        topic_scores.setdefault(t,[]).append(a["score"])
+        age = a.get("age",0)
+        ag = "18-22" if age<=22 else "23-27" if age<=27 else "28+"
+        age_scores.setdefault(ag,[]).append(a["score"])
+
+    return {
+        "total":             len(corpus),
+        "avg_score":         round(sum(scores)/len(scores),3),
+        "min_score":         min(scores),
+        "max_score":         max(scores),
+        "quality_dist":      dict(sorted(quality_dist.items(),key=lambda x:-x[1])),
+        "fallacy_freq":      sorted(fallacy_freq.items(),key=lambda x:-x[1]),
+        "intuition_detected":intuition_ct,
+        "topic_avg":         {t:round(sum(v)/len(v),2) for t,v in topic_scores.items()},
+        "age_avg":           {ag:round(sum(v)/len(v),2) for ag,v in age_scores.items()},
+    }
+
+stats = compute(CORPUS_EN)
+Path("data").mkdir(exist_ok=True)
+with open("data/corpus_en_50.json","w") as f:
+    json.dump({"stats":stats,"corpus":CORPUS_EN},f,indent=2)
+
+print("=== ENGLISH CORPUS — 50 ARGUMENTS ===")
+print(f"Avg score:    {stats['avg_score']} / 5.0")
+print(f"Range:        {stats['min_score']} – {stats['max_score']}")
+print(f"Intuition:    {stats['intuition_detected']}")
+print(f"\nQuality:")
+for q,n in stats['quality_dist'].items(): print(f"  {q:<12} {n} ({round(n/50*100)}%)")
+print(f"\nTop fallacies:")
+for f,n in stats['fallacy_freq'][:8]: print(f"  {f:<38} {n} ({round(n/50*100)}%)")
+print(f"\nBy topic:")
+for t,s in sorted(stats['topic_avg'].items(),key=lambda x:-x[1]): print(f"  {t:<22} {s}")
+print(f"\nBy age:")
+for ag,s in sorted(stats['age_avg'].items()): print(f"  {ag:<12} {s}")
