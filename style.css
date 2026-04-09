@@ -1,0 +1,41 @@
+:root {
+    --bg: #020203;
+    --card: rgba(20, 20, 22, 0.8);
+    --neon-blue: #00f2ff;
+    --neon-purple: #7000ff;
+    --text: #ffffff;
+}
+
+body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding: 40px;
+}
+
+.glass-card {
+    background: var(--card);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 25px;
+    margin-bottom: 20px;
+}
+
+.twin-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.score-value {
+    font-size: 3rem;
+    color: var(--neon-blue);
+    text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+}
+
+#syntheticTwin {
+    color: var(--neon-blue);
+    line-height: 1.6;
+}
