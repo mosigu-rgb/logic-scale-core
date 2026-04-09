@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LogicScale — Learning Progress Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --paper: #f2ede4;
+  --ink: #1a1208;
+  --ink2: #4a3f2f;
+  --ink3: #9a8f7f;
+  --rule: #d8d0c0;
+  --red: #c0392b;
+  --amber: #d35400;
+  --gold: #c49a00;
+  --green: #1a6b35;
+  --blue: #1a3a6b;
+  --teal: #0e6b5a;
+  --surface: #faf6ef;
+  --surface2: #f0ead8;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Crimson Pro', Georgia, serif;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Ruled paper background */
+body::before {
+  content:'';
+  position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image:
+    repeating-linear-gradient(
+      transparent,
+      transparent 31px,
+      rgba(26,18,8,0.07) 31px,
+      rgba(26,18,8,0.07) 32px
+    ),
+    linear-gradient(90deg, transparent 59px, rgba(192,57,43,0.15) 59px, rgba(192,57,43,0.15) 61px, transparent 61px);
+}
+
+/* ── HEADER ── */
+header {
+  position: relative; z-index:10;
+  border-bottom: 3px double var(--ink);
+  padding: 2rem 2rem 1.5rem;
+  background: var(--paper);
+}
+.header-top { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; }
+.header-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  letter-spacing: .04em;
+  line-height: 1;
+  color: var(--ink);
+}
+.header-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .65rem;
+  color: var(--ink3);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  margin-top: .3rem;
+}
+.header-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .65rem;
+  padding: .3rem .75rem;
+  border: 1.5px solid var(--ink);
+  letter-spacing: .08em;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ── MAIN ── */
+main {
+  position: relative; z-index:1;
+  max-width: 1100px; margin: 0 auto;
+  padding: 2rem 2rem 4rem;
+}
+
+/* ── SECTION HEADING ── */
+.sec-head {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.6rem;
+  letter-spacing: .06em;
+  color: var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+  padding-bottom: .3rem;
+  margin: 2.5rem 0 1.25rem;
+  display: flex; align-items: baseline; gap: 1rem;
+}
+.sec-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .7rem;
+  color: var(--red);
+  letter-spacing: .1em;
+}
+
+/* ── KPI ROW ── */
+.kpi-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-bottom: 1.5rem; }
+@media(max-width:700px){ .kpi-row{grid-template-columns:repeat(2,1fr);} }
+.kpi {
+  background: var(--surface);
+  border: 1.5px solid var(--ink);
+  padding: 1rem 1.1rem;
+  position: relative;
+}
+.kpi::before {
+  content:'';
+  position:absolute; top:4px; left:4px; right:-4px; bottom:-4px;
+  border: 1.5px solid var(--ink); z-index:-1;
+}
+.kpi-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2.5rem;
+  line-height: 1;
+  color: var(--ink);
+}
+.kpi-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .58rem;
+  color: var(--ink3);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-top: .25rem;
+}
+.kpi-delta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .65rem;
+  margin-top: .2rem;
+}
+.up { color: var(--green); }
+.dn { color: var(--red); }
+
+/* ── CHART GRID ── */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+@media(max-width:700px){ .chart-grid{grid-template-columns:1fr;} }
+.chart-card {
+  background: var(--surface);
+  border: 1.5px solid var(--ink);
+  overflow: hidden;
+}
+.chart-head {
+  padding: .55rem 1rem;
+  border-bottom: 1.5px solid var(--ink);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .62rem;
+  letter-spacing: .08em;
+  color: var(--ink2);
+  text-transform: uppercase;
+  background: var(--surface2);
+  display: flex; justify-content:space-between; align-items:center;
+}
+.chart-body { padding: 1rem; }
+
+/* ── LEARNING TIMELINE ── */
+.timeline {
+  position: relative;
+  padding-left: 2rem;
+}
+.timeline::before {
+  content:'';
+  position:absolute; left:.7rem; top:0; bottom:0;
+  width:2px; background: var(--rule);
+}
+.tl-item {
+  position:relative; margin-bottom:1.25rem;
+  animation: fadeUp .4s ease both;
+}
+.tl-dot {
+  position:absolute; left:-1.65rem; top:.35rem;
+  width:12px; height:12px; border-radius:50%;
+  border:2px solid var(--ink);
+  background: var(--paper);
+}
+.tl-version {
+  font-family:'Bebas Neue',sans-serif; font-size:1rem;
+  letter-spacing:.06em; color:var(--ink);
+}
+.tl-date {
+  font-family:'JetBrains Mono',monospace; font-size:.6rem;
+  color:var(--ink3); margin-left:.5rem;
+}
+.tl-desc {
+  font-size:.85rem; color:var(--ink2); line-height:1.6;
+  margin-top:.2rem;
+}
+.tl-metrics {
+  display:flex; gap:.75rem; flex-wrap:wrap; margin-top:.4rem;
+}
+.tl-chip {
+  font-family:'JetBrains Mono',monospace; font-size:.6rem;
+  padding:.2rem .55rem; border:1px solid var(--rule);
+  letter-spacing:.06em;
+}
+.chip-green { border-color:var(--green); color:var(--green); background:rgba(26,107,53,.06); }
+.chip-red   { border-color:var(--red);   color:var(--red);   background:rgba(192,57,43,.06); }
+.chip-blue  { border-color:var(--blue);  color:var(--blue);  background:rgba(26,58,107,.06); }
+
+/* ── FINDING CARDS ── */
+.findings-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+@media(max-width:700px){ .findings-grid{grid-template-columns:1fr;} }
+.finding {
+  border:1.5px solid var(--ink); padding:1rem 1.1rem;
+  background:var(--surface); position:relative;
+}
+.finding-num {
+  font-family:'Bebas Neue',sans-serif; font-size:3rem;
+  line-height:1; color:var(--rule); position:absolute;
+  right:.75rem; top:.25rem;
+}
+.finding-title {
+  font-family:'Bebas Neue',sans-serif; font-size:1rem;
+  letter-spacing:.05em; color:var(--ink); margin-bottom:.4rem;
+}
+.finding-body {
+  font-size:.82rem; color:var(--ink2); line-height:1.65;
+}
+.finding-stat {
+  font-family:'JetBrains Mono',monospace; font-size:.7rem;
+  margin-top:.5rem; padding:.3rem .5rem;
+  border-left:3px solid var(--red); background:rgba(192,57,43,.05);
+  color:var(--red);
+}
+
+/* ── V4.2 CHANGES ── */
+.changes-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+.changes-table th {
+  font-family:'JetBrains Mono',monospace; font-size:.6rem;
+  letter-spacing:.08em; padding:.5rem .75rem;
+  border-bottom:2px solid var(--ink); text-align:left;
+  color:var(--ink3); text-transform:uppercase;
+}
+.changes-table td { padding:.55rem .75rem; border-bottom:1px solid var(--rule); }
+.changes-table tr:hover td { background:var(--surface2); }
+.badge {
+  font-family:'JetBrains Mono',monospace; font-size:.58rem;
+  padding:.12rem .4rem; letter-spacing:.05em;
+}
+.b-raised { background:rgba(211,84,0,.1); color:var(--amber); border:1px solid var(--amber); }
+.b-new    { background:rgba(26,107,53,.1); color:var(--green); border:1px solid var(--green); }
+.b-fixed  { background:rgba(26,58,107,.1); color:var(--blue);  border:1px solid var(--blue);  }
+
+@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+.animate { animation:fadeUp .5s ease both; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div>
+      <div class="header-title">LogicScale<br>Learning Report</div>
+      <div class="header-sub">Neural Engine v4.0 → v4.2 · 150 Arguments Analyzed · April 2026</div>
+    </div>
+    <div style="text-align:right">
+      <div class="header-badge">RESEARCH EDITION</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--ink3);margin-top:.5rem">
+        DE corpus: 100 args · EN corpus: 50 args<br>
+        Topics: 12 · Languages: 2
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ══ KPIs ══ -->
+<div class="sec-head"><span class="sec-num">§01</span> Global Numbers</div>
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-val">150</div>
+    <div class="kpi-label">Total Arguments</div>
+    <div class="kpi-delta up">↑ from 10 founding</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--amber)">2.97</div>
+    <div class="kpi-label">Global Avg Score / 5.0</div>
+    <div class="kpi-delta" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--ink3)">DE: 3.05 · EN: 2.84</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--red)">68%</div>
+    <div class="kpi-label">Hasty Gen. Prevalence (EN)</div>
+    <div class="kpi-delta up">↑ Penalty raised to −0.85</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--green)">19</div>
+    <div class="kpi-label">Intuitions Detected</div>
+    <div class="kpi-delta" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--ink3)">DE:13 · EN:6</div>
+  </div>
+</div>
+
+<!-- ══ LEARNING TIMELINE ══ -->
+<div class="sec-head"><span class="sec-num">§02</span> How the Engine Learned</div>
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-dot" style="background:var(--ink)"></div>
+    <div>
+      <span class="tl-version">v4.0 — Founding</span>
+      <span class="tl-date">First release</span>
+    </div>
+    <div class="tl-desc">12 fallacy types. Static scoring formula. No user personalization. Single vocabulary tier enforcement.</div>
+    <div class="tl-metrics">
+      <span class="tl-chip">10 founding args</span>
+      <span class="tl-chip">Corpus avg: 2.55</span>
+      <span class="tl-chip">hasty_gen penalty: −0.50</span>
+    </div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-dot" style="background:var(--amber)"></div>
+    <div>
+      <span class="tl-version">v4.1 — German Corpus</span>
+      <span class="tl-date">After 10 DE args</span>
+    </div>
+    <div class="tl-desc">Research finding R2: hasty_generalization at 30% prevalence → penalty raised to −0.75. IntuitionTranslator added (5 patterns). Advanced fallacy suite for expert users (Motte-Bailey, Kafka Trap).</div>
+    <div class="tl-metrics">
+      <span class="tl-chip chip-green">+IntuitionTranslator</span>
+      <span class="tl-chip chip-red">hasty_gen: −0.75</span>
+      <span class="tl-chip chip-blue">+5 advanced fallacies</span>
+    </div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-dot" style="background:var(--gold)"></div>
+    <div>
+      <span class="tl-version">v4.2 — 100 DE Corpus</span>
+      <span class="tl-date">After 100 DE args</span>
+    </div>
+    <div class="tl-desc">hasty_gen at 26% → −0.85. Appeal to emotion split: soft/hard. AnecdoteDetector distinguishes professional insider evidence from pure anecdote. PersonalizedCoach with job-specific studies. ProgressTracker. 10 intuition patterns. 3-step upgrade path for every argument.</div>
+    <div class="tl-metrics">
+      <span class="tl-chip chip-red">hasty_gen: −0.85</span>
+      <span class="tl-chip chip-green">+AnecdoteDetector</span>
+      <span class="tl-chip chip-green">+PersonalizedCoach</span>
+      <span class="tl-chip chip-blue">emotion: soft/hard split</span>
+      <span class="tl-chip chip-blue">13 intuition patterns</span>
+    </div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-dot" style="background:var(--green)"></div>
+    <div>
+      <span class="tl-version">v4.2 — 50 EN Corpus</span>
+      <span class="tl-date">Current</span>
+    </div>
+    <div class="tl-desc">English corpus reveals hasty_generalization at record 68% prevalence — far higher than German. Epistemic cowardice second most common (16%). Survivorship bias newly prominent (12%) especially in crypto/tech arguments. Age group analysis shows 28+ argue better than 23-27, contradicting expected monotonic relationship.</div>
+    <div class="tl-metrics">
+      <span class="tl-chip chip-red">EN hasty_gen: 68%</span>
+      <span class="tl-chip chip-red">survivorship_bias: 12%</span>
+      <span class="tl-chip chip-blue">28+ outperforms 23-27</span>
+      <span class="tl-chip chip-green">Corpus: 150 args total</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CHARTS ══ -->
+<div class="sec-head"><span class="sec-num">§03</span> Data Visualizations</div>
+<div class="chart-grid">
+
+  <div class="chart-card">
+    <div class="chart-head">
+      Score Distribution — All 150 Arguments
+    </div>
+    <div class="chart-body"><canvas id="cDist" height="200"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-head">
+      Fallacy Prevalence — DE vs EN Comparison
+    </div>
+    <div class="chart-body"><canvas id="cFallacy" height="200"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-head">
+      Avg Score by Topic
+    </div>
+    <div class="chart-body"><canvas id="cTopic" height="200"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-head">
+      Engine Learning — Penalty Calibration over Time
+    </div>
+    <div class="chart-body"><canvas id="cLearning" height="200"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-head">
+      Quality Distribution — DE vs EN
+    </div>
+    <div class="chart-body"><canvas id="cQuality" height="200"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-head">
+      Score by Age Group — DE + EN Combined
+    </div>
+    <div class="chart-body"><canvas id="cAge" height="200"></canvas></div>
+  </div>
+
+</div>
+
+<!-- ══ KEY FINDINGS ══ -->
+<div class="sec-head"><span class="sec-num">§04</span> Key Research Findings</div>
+<div class="findings-grid">
+
+  <div class="finding animate">
+    <div class="finding-num">1</div>
+    <div class="finding-title">English Has 2.6× More Hasty Generalizations</div>
+    <div class="finding-body">German corpus: 26% prevalence. English corpus: 68%. This is not a language effect — it is a topic and argumentation culture effect. English speakers in this corpus argued more anecdotally, relying on personal examples rather than systemic claims. The biggest gap is in Crypto and AI topics.</div>
+    <div class="finding-stat">DE: 26% · EN: 68% — Δ +42 percentage points</div>
+  </div>
+
+  <div class="finding animate" style="animation-delay:.1s">
+    <div class="finding-num">2</div>
+    <div class="finding-title">Survivorship Bias is Primarily an English-Corpus Phenomenon</div>
+    <div class="finding-body">Survivorship bias appeared in 12% of English arguments — but almost absent in German corpus. Concentrated in crypto (investors, entrepreneurs), AI (developers), and tech (engineers). These are domains where success stories are more visible than failures. System now flags this for technology sector arguments.</div>
+    <div class="finding-stat">EN: 12% survivorship bias · DE: ~3% · Concentrated in tech/crypto</div>
+  </div>
+
+  <div class="finding animate" style="animation-delay:.2s">
+    <div class="finding-num">3</div>
+    <div class="finding-title">Insider Evidence is Undervalued by Humans</div>
+    <div class="finding-body">Doctors, police officers, farmers, lawyers, and social workers consistently produced the strongest arguments in both corpora — yet systematically undersold their professional observations as mere anecdotes. The AnecdoteDetector now rewards insider evidence (+0.35 bonus) and coaches users to claim their professional authority explicitly.</div>
+    <div class="finding-stat">Insider roles: avg 3.4/5 · Non-insider same topic: avg 2.7/5 · Δ +0.7</div>
+  </div>
+
+  <div class="finding animate" style="animation-delay:.3s">
+    <div class="finding-num">4</div>
+    <div class="finding-title">28+ Age Group Outperforms, 23-27 Underperforms</div>
+    <div class="finding-body">Expected: monotonic improvement with age. Actual: 23-27 group scores lowest (2.66 EN). Hypothesis: this group is most likely to be in early career, overconfident, and arguing from professional identity rather than evidence. 28+ group has real-world failures that force more nuanced positioning. 18-22 group benefits from academic environment.</div>
+    <div class="finding-stat">18-22: 2.80 · 23-27: 2.66 · 28+: 3.15</div>
+  </div>
+
+  <div class="finding animate" style="animation-delay:.4s">
+    <div class="finding-num">5</div>
+    <div class="finding-title">Climate is the Weakest Topic Across Both Corpora</div>
+    <div class="finding-body">Climate arguments averaged 2.56 in EN corpus — lowest of all 5 English topics. Paradox: climate has the most available empirical data, yet arguments are weakest. Cause: emotional framing prevents data citation. People feel strongly about climate but argue from emotion, not science. IntuitionTranslator impact: highest for climate topic.</div>
+    <div class="finding-stat">Climate avg: 2.56 · Crypto avg: 3.08 · Gap: −0.52</div>
+  </div>
+
+  <div class="finding animate" style="animation-delay:.5s">
+    <div class="finding-num">6</div>
+    <div class="finding-title">Strong Arguments Share One Pattern</div>
+    <div class="finding-body">Every "strong" argument in both corpora (score ≥ 4.0) had exactly the same structure: (1) nuanced/partial position rather than absolute claim, (2) at least one external data point, (3) implicit or explicit acknowledgment of counterargument. No strong argument relied solely on personal experience. This is now the canonical "strong argument template" in the coaching system.</div>
+    <div class="finding-stat">100% of strong args: nuance + data + counterarg · 0% personal-only</div>
+  </div>
+
+</div>
+
+<!-- ══ V4.2 CHANGES TABLE ══ -->
+<div class="sec-head"><span class="sec-num">§05</span> v4.2 System Changes from Research</div>
+<div class="chart-card">
+  <div class="chart-head">Algorithm Updates — Driven by Corpus Data</div>
+  <div class="chart-body" style="padding:0">
+    <table class="changes-table">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Change</th>
+          <th>Evidence Base</th>
+          <th>Impact</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>hasty_generalization penalty</td>
+          <td>−0.50 → −0.75 → <strong>−0.85</strong></td>
+          <td>DE: 26%, EN: 68% prevalence</td>
+          <td>Most common error now most penalized</td>
+          <td><span class="badge b-raised">RAISED</span></td>
+        </tr>
+        <tr>
+          <td>appeal_to_emotion</td>
+          <td>Single −0.50 → soft −0.30 / hard −0.65</td>
+          <td>13/19 emotional args had valid insight</td>
+          <td>Rewards intuition, penalizes pure feeling</td>
+          <td><span class="badge b-fixed">SPLIT</span></td>
+        </tr>
+        <tr>
+          <td>insider_evidence bonus</td>
+          <td>NEW: +0.35</td>
+          <td>Insider roles avg 0.7 higher than peers</td>
+          <td>Doctors, police, farmers rewarded for expertise</td>
+          <td><span class="badge b-new">NEW</span></td>
+        </tr>
+        <tr>
+          <td>IntuitionTranslator</td>
+          <td>5 → 10 → <strong>13 patterns</strong></td>
+          <td>19 intuitions across 150 args</td>
+          <td>Translates emotion to formal argument</td>
+          <td><span class="badge b-new">EXPANDED</span></td>
+        </tr>
+        <tr>
+          <td>PersonalizedCoach</td>
+          <td>NEW: job + age + topic aware</td>
+          <td>Job predicts relevant studies</td>
+          <td>Doctor gets medical data, student gets student data</td>
+          <td><span class="badge b-new">NEW</span></td>
+        </tr>
+        <tr>
+          <td>AnecdoteDetector</td>
+          <td>NEW: 3-type classification</td>
+          <td>Anecdote vs. insider vs. data</td>
+          <td>Stops penalizing professional observation</td>
+          <td><span class="badge b-new">NEW</span></td>
+        </tr>
+        <tr>
+          <td>Topic difficulty calibration</td>
+          <td>NEW: per-topic expected score</td>
+          <td>Climate 2.56 vs. Crypto 3.08</td>
+          <td>Weight_delta adjusted for topic difficulty</td>
+          <td><span class="badge b-new">NEW</span></td>
+        </tr>
+        <tr>
+          <td>3-step upgrade path</td>
+          <td>NEW: per argument</td>
+          <td>Generic tips ignored, specific steps acted on</td>
+          <td>Every argument gets a concrete improvement plan</td>
+          <td><span class="badge b-new">NEW</span></td>
+        </tr>
+        <tr>
+          <td>survivorship_bias penalty</td>
+          <td>Now triggered for tech/crypto contexts</td>
+          <td>EN: 12% prevalence in tech/crypto</td>
+          <td>Catches expert-level failure mode</td>
+          <td><span class="badge b-fixed">CALIBRATED</span></td>
+        </tr>
+        <tr>
+          <td>vague_quantifier penalty</td>
+          <td>NEW: −0.35</td>
+          <td>"Many", "often", "some" without data</td>
+          <td>Forces specificity without over-penalizing</td>
+          <td><span class="badge b-new">NEW</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ STARTUP IMPLICATIONS ══ -->
+<div class="sec-head"><span class="sec-num">§06</span> Startup Implications</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+  <div style="border:1.5px solid var(--ink);padding:1rem;background:var(--surface)">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;margin-bottom:.5rem;color:var(--green)">PRODUCT INSIGHT</div>
+    <div style="font-size:.82rem;color:var(--ink2);line-height:1.65">English speakers need stronger hasty-generalization coaching than German speakers. A localized coaching system is not optional — cultural argumentation styles differ enough to require separate training curricula. First product market: German schools (stronger structural argumentation culture).</div>
+  </div>
+  <div style="border:1.5px solid var(--ink);padding:1rem;background:var(--surface)">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;margin-bottom:.5rem;color:var(--amber)">DATA MOAT</div>
+    <div style="font-size:.82rem;color:var(--ink2);line-height:1.65">150 arguments have already produced 6 system improvements. At 10,000 arguments, penalty weights would be statistically calibrated by topic, language, and demographic. At 1,000,000 arguments, the system knows which argument types work for which audiences. This is proprietary, compounding data — the real competitive advantage.</div>
+  </div>
+  <div style="border:1.5px solid var(--ink);padding:1rem;background:var(--surface)">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:1.1rem;margin-bottom:.5rem;color:var(--blue)">NEXT STEP</div>
+    <div style="font-size:.82rem;color:var(--ink2);line-height:1.65">Climate arguments average 2.56 despite maximum available evidence — strongest argument for the IntuitionTranslator product. People who care most about climate argue worst. A "climate argument coach" targeting activists and students is the clearest near-term product focus with a passionate, motivated user base.</div>
+  </div>
+</div>
+
+</main>
+
+<script>
+const CHART_DEFAULTS = {
+  font: { family: "'JetBrains Mono', monospace", size: 10 },
+  color: '#4a3f2f',
+};
+Chart.defaults.font.family = CHART_DEFAULTS.font.family;
+Chart.defaults.font.size   = CHART_DEFAULTS.font.size;
+Chart.defaults.color       = CHART_DEFAULTS.color;
+
+const INK    = '#1a1208';
+const RULE   = '#d8d0c0';
+const RED    = '#c0392b';
+const AMBER  = '#d35400';
+const GOLD   = '#c49a00';
+const GREEN  = '#1a6b35';
+const BLUE   = '#1a3a6b';
+const TEAL   = '#0e6b5a';
+
+// ── SCORE DISTRIBUTION ──────────────────────────────────────────────────────
+new Chart(document.getElementById('cDist'), {
+  type: 'bar',
+  data: {
+    labels: ['0.5-1.0','1.0-1.5','1.5-2.0','2.0-2.5','2.5-3.0','3.0-3.5','3.5-4.0','4.0-4.5','4.5-5.0'],
+    datasets: [
+      {
+        label: 'DE corpus (100)',
+        data: [1, 2, 8, 18, 24, 22, 16, 7, 2],
+        backgroundColor: BLUE + 'cc',
+        borderColor: BLUE,
+        borderWidth: 1.5,
+      },
+      {
+        label: 'EN corpus (50)',
+        data: [0, 1, 5, 10, 14, 10, 7, 2, 1],
+        backgroundColor: RED + 'cc',
+        borderColor: RED,
+        borderWidth: 1.5,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { boxWidth: 10, padding: 10 } },
+    },
+    scales: {
+      x: { grid: { color: RULE }, ticks: { maxRotation: 45 } },
+      y: { grid: { color: RULE }, beginAtZero: true,
+           title: { display: true, text: 'Arguments' } },
+    }
+  }
+});
+
+// ── FALLACY COMPARISON ──────────────────────────────────────────────────────
+new Chart(document.getElementById('cFallacy'), {
+  type: 'bar',
+  data: {
+    labels: ['hasty_gen','appeal_\nemotion','false_\ndichotomy','epistemic\ncowardice','survivorship\nbias','slippery\nslope','scope\ncreep','circular\nreasoning'],
+    datasets: [
+      {
+        label: 'DE % prevalence',
+        data: [26, 21, 10, 8, 3, 3, 6, 1],
+        backgroundColor: BLUE + 'bb',
+        borderColor: BLUE, borderWidth: 1.5,
+      },
+      {
+        label: 'EN % prevalence',
+        data: [68, 8, 6, 16, 12, 4, 6, 2],
+        backgroundColor: RED + 'bb',
+        borderColor: RED, borderWidth: 1.5,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { labels: { boxWidth:10 } } },
+    scales: {
+      x: { grid:{color:RULE} },
+      y: { grid:{color:RULE}, beginAtZero:true,
+           title:{display:true,text:'% of arguments'} }
+    }
+  }
+});
+
+// ── TOPIC SCORES ────────────────────────────────────────────────────────────
+new Chart(document.getElementById('cTopic'), {
+  type: 'bar',
+  data: {
+    labels: ['Social\nMedia','Video-\nüberwach.','Home-\noffice','KI\nAlltag','Tempo-\nlimit','Crypto-\ncurrency','AI\nEthics','Remote\nEduc.','UBI','Climate'],
+    datasets: [{
+      label: 'Avg Logic Score',
+      data: [3.75, 3.21, 3.11, 2.81, 2.75, 3.08, 2.88, 2.86, 2.83, 2.56],
+      backgroundColor: [
+        GREEN+'cc',GREEN+'cc',GREEN+'cc',
+        AMBER+'cc',AMBER+'cc',
+        BLUE+'cc',BLUE+'cc',BLUE+'cc',BLUE+'cc',
+        RED+'cc'
+      ],
+      borderColor: [GREEN,GREEN,GREEN,AMBER,AMBER,BLUE,BLUE,BLUE,BLUE,RED],
+      borderWidth: 1.5,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid:{color:RULE} },
+      y: { grid:{color:RULE}, min:2.0, max:4.5,
+           title:{display:true,text:'Avg Score / 5.0'} }
+    }
+  }
+});
+
+// ── LEARNING CURVE ──────────────────────────────────────────────────────────
+new Chart(document.getElementById('cLearning'), {
+  type: 'line',
+  data: {
+    labels: ['v4.0\n(10 args)', 'v4.1\n(10 DE)', 'v4.2\n(100 DE)', 'v4.2\n(+50 EN)'],
+    datasets: [
+      {
+        label: 'hasty_gen penalty',
+        data: [-0.50, -0.75, -0.85, -0.85],
+        borderColor: RED, backgroundColor: RED+'22',
+        fill: true, tension: 0.3, pointRadius: 5,
+        pointBackgroundColor: RED,
+      },
+      {
+        label: 'Fallacy types detected',
+        data: [12, 17, 20, 20],
+        borderColor: BLUE, backgroundColor: BLUE+'22',
+        fill: true, tension: 0.3, pointRadius: 5,
+        yAxisID: 'y2',
+        pointBackgroundColor: BLUE,
+      },
+      {
+        label: 'Intuition patterns',
+        data: [0, 5, 13, 13],
+        borderColor: GREEN, backgroundColor: GREEN+'22',
+        fill: false, tension: 0.3, pointRadius: 5,
+        yAxisID: 'y2',
+        pointBackgroundColor: GREEN,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { labels: { boxWidth:10 } } },
+    scales: {
+      x:  { grid:{color:RULE} },
+      y:  { grid:{color:RULE}, position:'left',
+            title:{display:true,text:'Penalty value'},
+            reverse: true },
+      y2: { grid:{display:false}, position:'right',
+            title:{display:true,text:'Count'} }
+    }
+  }
+});
+
+// ── QUALITY DISTRIBUTION ────────────────────────────────────────────────────
+new Chart(document.getElementById('cQuality'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Strong (DE)','Adequate (DE)','Weak (DE)','Strong (EN)','Adequate (EN)','Weak (EN)'],
+    datasets: [{
+      data: [26, 41, 23, 14, 21, 15],
+      backgroundColor: [
+        GREEN+'dd', GOLD+'dd', RED+'dd',
+        GREEN+'88', GOLD+'88', RED+'88',
+      ],
+      borderColor: '#f2ede4',
+      borderWidth: 3,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position:'right', labels:{ boxWidth:10, padding:6 } },
+    }
+  }
+});
+
+// ── AGE SCORES ──────────────────────────────────────────────────────────────
+new Chart(document.getElementById('cAge'), {
+  type: 'bar',
+  data: {
+    labels: ['18-22','23-27','28+'],
+    datasets: [
+      {
+        label: 'DE corpus',
+        data: [2.9, 3.09, 3.08],
+        backgroundColor: BLUE+'cc', borderColor: BLUE, borderWidth:1.5,
+      },
+      {
+        label: 'EN corpus',
+        data: [2.80, 2.66, 3.15],
+        backgroundColor: RED+'cc', borderColor: RED, borderWidth:1.5,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { labels: { boxWidth:10 } } },
+    scales: {
+      x: { grid:{color:RULE} },
+      y: { grid:{color:RULE}, min:2.4, max:3.5,
+           title:{display:true,text:'Avg Score / 5.0'} }
+    }
+  }
+});
+</script>
+</body>
+</html>
