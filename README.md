@@ -17,5 +17,5 @@
 LogicScale isn't just a tool; it's the foundation for the **Global Reasoning Index**. By transforming raw arguments into structured data, we create the infrastructure to measure and improve the quality of human discourse worldwide.
 
 ---
-*Developed by the LogicScale Research Lab for INNOSpark 2026.*
+*Developed by Moritz Bürkle with Claude*
 
